@@ -1,0 +1,15 @@
+services:
+  vkbottle:
+    build: .
+    ports:
+      - "8000:8000"  # vkbottle
+    volumes:
+      - .:/app
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      - PYTHONPATH=/app
+    command: >
+      sh -c ". /venv/bin/activate && python main.py"
+    restart: unless-stopped
+    mem_limit: 1g  # Ограничение памяти

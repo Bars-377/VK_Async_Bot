@@ -1,0 +1,32 @@
+{
+    "start": {
+        "message": "Добро пожаловать! Нажмите 'Начать' для начала.",
+        "buttons": [
+            "button_start"
+        ]
+    },
+    "question1": {
+        "message": "Вопрос 1: Как дела?",
+        "buttons": [
+            "button_question1"
+        ]
+    },
+    "question2": {
+        "message": "Вопрос 2: Как тебя зовут?",
+        "buttons": [
+            "button_question2"
+        ]
+    },
+    "question3": {
+        "message": "Вопрос 3: Где ты учишься?",
+        "buttons": [
+            "button_question3"
+        ]
+    },
+    "question4": {
+        "message": "Спасибо за ответы!",
+        "buttons": [
+            "button_question4"
+        ]
+    }
+}
