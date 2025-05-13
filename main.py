@@ -58,7 +58,7 @@ from vkbottle import Keyboard, KeyboardButtonColor, Text
 def process_1():
 
     ctx = CtxStorage()
-    bot = Bot(token=config["VKONTAKTE"]["token_one"])
+    bot = Bot(token=config["VKONTAKTE"]["token"])
 
     filials_id_docs = ('533',
                 '461', '641', '689', '431', '443', '479',
@@ -227,7 +227,7 @@ def process_1():
             ctx.set(f'{user_id}: phone', answer[1][0][0])
 
             await bot.state_dispenser.set(message.peer_id, SuperStates.FILIALS)
-            await buttons.menu(user_id, config["VKONTAKTE"]["token_one"])
+            await buttons.menu(user_id, config["VKONTAKTE"]["token"])
             # Очистка всех переменных
             await reset_ctx(user_id)
             return await message.answer("{}".format(users_info[0].first_name) + ', Вы в главном меню')
@@ -696,7 +696,7 @@ def process_1():
                 photo = "photo-224967611_457239778"
 
                 await bot.state_dispenser.set(message.peer_id, SuperStates.FILIALS)
-                await buttons.menu(user_id, config["VKONTAKTE"]["token_one"])
+                await buttons.menu(user_id, config["VKONTAKTE"]["token"])
                 # Очистка всех переменных
                 # await reset_ctx(user_id)
                 await message.answer("{}".format(users_info[0].first_name) + ', Вы в главном меню', attachment=photo)
@@ -811,7 +811,7 @@ def process_1():
                     photo = "photo-224967611_457239778"
 
                     await bot.state_dispenser.set(message.peer_id, SuperStates.FILIALS)
-                    await buttons.menu(user_id, config["VKONTAKTE"]["token_one"])
+                    await buttons.menu(user_id, config["VKONTAKTE"]["token"])
                     # Очистка всех переменных
                     # await reset_ctx(user_id)
                     return await message.answer("{}".format(users_info[0].first_name) + ', Вы в главном меню', attachment=photo)
@@ -4013,7 +4013,7 @@ def process_1():
                 photo = "photo-224967611_457239778"
 
                 await bot.state_dispenser.set(message.peer_id, SuperStates.FILIALS)
-                await buttons.menu(user_id, config["VKONTAKTE"]["token_one"])
+                await buttons.menu(user_id, config["VKONTAKTE"]["token"])
                 # Очистка всех переменных
                 # await reset_ctx(user_id)
                 await message.answer("{}".format(users_info[0].first_name) + ', Вы в главном меню', attachment=photo)
@@ -4073,9 +4073,9 @@ def process_5():
             "reply_markup": json.dumps(keyboard)
         }
 
-        requests.post(f"https://api.telegram.org/bot{config["VKONTAKTE"]["token_one"]}/sendMessage", data=data)
+        requests.post(f"https://api.telegram.org/bot{config["TELEGRAM"]["token_one"]}/sendMessage", data=data)
         # """ОТКЛЮЧИЛ ОСНОВНОЙ ТБ"""
-        requests.post(f"https://api.telegram.org/bot{config["VKONTAKTE"]["token_two"]}/sendMessage", data=data)
+        requests.post(f"https://api.telegram.org/bot{config["TELEGRAM"]["token_two"]}/sendMessage", data=data)
 
     server = "https://equeue.mfc.tomsk.ru"
 
@@ -4138,7 +4138,7 @@ def process_5():
 def process_2():
     def post_message(user_id, talon, time, date, department, service, uuid, tel, fio):
         # Данные для авторизации
-        access_token = config["VKONTAKTE"]["token_one"]
+        access_token = config["VKONTAKTE"]["token"]
         api_version = "5.199"
         message = f"У вас скоро приём {date} в {time}! Номер вашего талона {talon}, филиал: {department}, услуга: {service}"
 
@@ -4286,7 +4286,7 @@ def process_4():
                 return contents
 
         # Данные для авторизации
-        access_token = config["VKONTAKTE"]["token_one"]
+        access_token = config["VKONTAKTE"]["token"]
         api_version = "5.199"
         if not now == 'yes':
             message = f"Напоминаю, вы хотели посетить:\n\n{read_file()}"
@@ -4318,8 +4318,8 @@ def process_4():
         }
 
         if platform == 'TB':
-            requests.post(f"https://api.telegram.org/bot{config["VKONTAKTE"]["token_one"]}/sendMessage", data=data)
-            requests.post(f"https://api.telegram.org/bot{config["VKONTAKTE"]["token_two"]}/sendMessage", data=data)
+            requests.post(f"https://api.telegram.org/bot{config["TELEGRAM"]["token_one"]}/sendMessage", data=data)
+            requests.post(f"https://api.telegram.org/bot{config["TELEGRAM"]["token_two"]}/sendMessage", data=data)
 
     # Создание одиночного соединения
     dbconfig = {
@@ -4400,7 +4400,7 @@ def custom_random():
     return next_number
 
 def process_3():
-    token=config["VKONTAKTE"]["token_one"]
+    token=config["VKONTAKTE"]["token"]
     bot = Bot(token=token)
 
     @bot.labeler.message()
