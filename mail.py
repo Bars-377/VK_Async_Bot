@@ -247,7 +247,7 @@ def process_file():
     config.read("config.ini")
 
     # Ваш токен бота
-    TOKEN = config["TELEGRAM"]["token"]
+    TOKEN = config["TELEGRAM"]["token_one"]
 
     def search_user_id():
         import mysql.connector
