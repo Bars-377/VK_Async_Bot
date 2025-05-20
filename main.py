@@ -1918,8 +1918,8 @@ def process_1():
 
                 answer = await base(user_id = user_id).phone_select()
 
-                if answer[1][0][0] in ('89962061399', '89016106001'):
-                    return await user_verification(user_id, message, users_info)
+                # if answer[1][0][0] in ('89962061399', '89016106001'):
+                #     return await user_verification(user_id, message, users_info)
 
                 agreement_answer = await base(user_id = user_id).agreement_select()
 
@@ -2819,8 +2819,8 @@ def process_1():
 
                 answer = await base(user_id = user_id).phone_select()
 
-                if answer[1][0][0] in ('89962061399', '89016106001'):
-                    return await user_verification(user_id, message, users_info)
+                # if answer[1][0][0] in ('89962061399', '89016106001'):
+                #     return await user_verification(user_id, message, users_info)
 
                 agreement_answer = await base(user_id = user_id).agreement_select()
 
