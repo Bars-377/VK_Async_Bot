@@ -1101,6 +1101,17 @@ class base:
     async def base_record(self, fio, filial, usluga, time, date, fields_all):
 
         try:
+
+            db = Database(*SSR)
+            await db.connect()
+
+            service = await db.search('service', 'notification', f"id_vk = {self.user_id}", one=True)
+            if service[0] == usluga:
+                res = {
+                    "code": "no_record"
+                }
+                return res
+
             fields = json.loads(fields_all)["fields"]
             fields = json.dumps(fields)
             casecount = json.loads(fields_all)["casecount"]
@@ -1149,10 +1160,6 @@ class base:
                 # new_time_obj = time_obj + datetime.timedelta(hours=7)
                 # time_ = new_time_obj.strftime("%H:%M:%S")
 
-
-                db = Database(*SSR)
-                await db.connect()
-
                 await db.insert('vkontakte_reg',
                                 sender=f'{self.user_id}',
                                 talon=f'{res['number']}',
@@ -1173,7 +1180,12 @@ class base:
                                 time=f'{time_}',
                                 platform='VK')
 
-                await db.close()
+                # Обновление услуги в таблице notification
+                await db.update('notification', f'id_vk = "{self.user_id}"', service=f'{usluga}')
+                # await db.execute(
+                #     "UPDATE notification SET service = CAST(service AS INTEGER) + 1 WHERE id_vk = ?",
+                #     (self.user_id,)
+                # )
 
                 # pool = await aiomysql.create_pool(
                 #     host=host,
@@ -1221,6 +1233,7 @@ class base:
                     "code": "err_no_slots",
                     "err_msg": str(response_res)
                 }
+            await db.close()
             return res
         except Exception as e:
             # Вывод подробной информации об ошибке

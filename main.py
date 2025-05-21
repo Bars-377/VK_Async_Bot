@@ -3846,6 +3846,9 @@ def process_1():
                 await message.answer(answer)
 
                 return await user_verification(user_id, message, users_info)
+            elif res['code'] == 'no_record':
+                await message.answer('Вы привысили лимит записи на эту услугу')
+                return await user_verification(user_id, message, users_info)
             elif res['code'] == 'err_no_slots':
 
                 ctx.set(f'{user_id}: date', 'None')
@@ -4499,6 +4502,38 @@ def process_8():
 #         with open(filename_mail, 'w') as file:
 #             file.write("")
 
+def process_10():
+
+    # if datetime.now().day != 1:
+    #     # print("Сегодня не первое число месяца. Сброс не требуется.")
+    #     return
+
+    now = datetime.now()
+    if now.hour != 0 or now.minute != 0:
+        return  # Не 00:00 — выходим
+
+    DB_CONFIG = {
+        'host': host,
+        'user': user,
+        'password': password,
+        'database': database,
+        'port': 3306
+    }
+
+    try:
+        conn = mysql.connector.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE notification SET service = 0")
+        conn.commit()
+        print("Сброс услуг пользователей успешно выполнен.")
+    except mysql.connector.Error as err:
+        print(f"Ошибка MySQL: {err}")
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals() and conn.is_connected():
+            conn.close()
+
 from mysql.connector import Error
 from aiohttp import ClientConnectorError  # Импортируем исключение для обработки ошибок соединения
 
@@ -4515,6 +4550,7 @@ if __name__ == "__main__":
     process7 = Process(target=process_7)
     process8 = Process(target=process_8)
     # process9 = Process(target=process_9)
+    process10 = Process(target=process_10)
 
     # process1.start()
     # process2.start()
@@ -4525,6 +4561,7 @@ if __name__ == "__main__":
     # process7.start()
     # process8.start()
     # process9.start()
+    # process10.start()
 
     # process1.join()
     # process2.join()
@@ -4535,6 +4572,7 @@ if __name__ == "__main__":
     # process7.join()
     # process8.join()
     # process9.join()
+    # process10.join()
 
     while True:
         try:
@@ -4574,6 +4612,10 @@ if __name__ == "__main__":
             #     process9 = Process(target=process_9)
             #     process9.start()
             #     # process9.join()
+            elif not process10.is_alive():
+                process10 = Process(target=process_10)
+                process10.start()
+                # process10.join()
         except (ClientConnectorError, Error) as e:
             # Обработка ошибок подключения и MySQL
             if isinstance(e, ClientConnectorError):
@@ -4631,6 +4673,11 @@ if __name__ == "__main__":
             # process9.join()  # Ждем завершения процесса
             # print("Процесс 9 был завершен.")
 
+            print("Завершение процесса 10...")
+            process10.terminate()  # Принудительное завершение процесса
+            process10.join()  # Ждем завершения процесса
+            print("Процесс 10 был завершен.")
+
         except ConnectionAbortedError:
             print("Ошибка: Программа на вашем хост-компьютере разорвала установленное подключение")
 
@@ -4678,3 +4725,8 @@ if __name__ == "__main__":
             # process9.terminate()  # Принудительное завершение процесса
             # process9.join()  # Ждем завершения процесса
             # print("Процесс 9 был завершен.")
+
+            print("Завершение процесса 10...")
+            process10.terminate()  # Принудительное завершение процесса
+            process10.join()  # Ждем завершения процесса
+            print("Процесс 10 был завершен.")
