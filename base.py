@@ -3,6 +3,7 @@ import json
 import aiohttp
 import functools
 import datetime
+import ast
 
 cache = {}
 
@@ -896,7 +897,7 @@ class base:
         return result
 
     async def caches_processing(key, data):
-        import ast
+
         if key in data:
             data = ast.literal_eval(data)
             text_cache = data['fields'][key]
@@ -1105,12 +1106,22 @@ class base:
             db = Database(*SSR)
             await db.connect()
 
-            service = await db.search('service', 'notification', f"id_vk = {self.user_id}", one=True)
-            if service[0] == usluga:
-                res = {
-                    "code": "no_record"
-                }
-                return res
+            service = await db.search('restrictions', 'notification', f"id_vk = {self.user_id}", one=True)
+
+            raw = service[0] if service and service[0] else ''
+
+            if not raw.strip():
+                restrictions = []
+            else:
+                try:
+                    restrictions = ast.literal_eval(raw)
+                except Exception as e:
+                    print(f"[ERROR] Не удалось разобрать restrictions: {e}")
+                    restrictions = []
+
+            for restriction in restrictions:
+                if restriction.get('service') == usluga and restriction.get('date') == date:
+                    return {"code": "no_record"}
 
             fields = json.loads(fields_all)["fields"]
             fields = json.dumps(fields)
@@ -1180,8 +1191,36 @@ class base:
                                 time=f'{time_}',
                                 platform='VK')
 
-                # Обновление услуги в таблице notification
-                await db.update('notification', f'id_vk = "{self.user_id}"', service=f'{usluga}')
+                # Получаем данные
+                await db.cursor.execute("SELECT restrictions FROM notification WHERE id_vk = %s LIMIT 1", (self.user_id,))
+                result = await db.cursor.fetchone()
+
+                # Попытка безопасно прочитать список
+                if result and result[0]:
+                    try:
+                        parsed = ast.literal_eval(result[0])
+                        if isinstance(parsed, list):
+                            current_restrictions = parsed
+                        else:
+                            current_restrictions = []
+                    except Exception:
+                        current_restrictions = []
+                else:
+                    current_restrictions = []
+
+                # Добавляем новую запись
+                current_restrictions.append({'service': usluga, 'date': date})
+                new_restrictions = str(current_restrictions)
+
+                # Обновляем БД
+                await db.cursor.execute(
+                    "UPDATE notification SET restrictions = %s WHERE id_vk = %s",
+                    (new_restrictions, self.user_id)
+                )
+                await db.connection.commit()
+
+                # # Обновление услуги в таблице notification
+                # await db.update('notification', f'id_vk = "{self.user_id}"', restrictions=f'{usluga}')
                 # await db.execute(
                 #     "UPDATE notification SET service = CAST(service AS INTEGER) + 1 WHERE id_vk = ?",
                 #     (self.user_id,)

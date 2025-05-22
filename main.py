@@ -5,7 +5,7 @@ from vkbottle.bot import BotLabeler, Message
 from vkbottle import CtxStorage
 import os
 from pathlib import Path
-
+import mysql.connector
 import json
 
 with open('messages.json', 'r', encoding='utf-8') as file:
@@ -4050,9 +4050,10 @@ def process_1():
 import requests
 import random
 import time
-import mysql.connector
+
 import datetime
 
+"""Уведолмение о приёме в telegram"""
 def process_5():
     def post_message(ani, talon, time, date, department, service):
 
@@ -4144,6 +4145,7 @@ def process_5():
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
+"""Уведолмение о приёме в VKONTAKTE"""
 def process_2():
     def post_message(user_id, talon, time, date, department, service, uuid, tel, fio):
         # Данные для авторизации
@@ -4278,6 +4280,7 @@ def process_2():
 
 from mysql.connector import errors
 
+"""Уведомление на событие"""
 def process_4():
     def post_message(user_id_vk, user_id_tb, event, date, platform, now):
 
@@ -4408,6 +4411,7 @@ def custom_random():
     next_number = (1103515245 * seed + 12345) % 2**31  # Простой линейный конгруэнтный генератор
     return next_number
 
+"""Создаёт кнопку возврата к боту"""
 def process_3():
     token=config["VKONTAKTE"]["token"]
     bot = Bot(token=token)
@@ -4502,15 +4506,15 @@ def process_8():
 #         with open(filename_mail, 'w') as file:
 #             file.write("")
 
+"""Очистка в restrictions просроченных талонов для возможности регистрации"""
 def process_10():
 
-    # if datetime.now().day != 1:
-    #     # print("Сегодня не первое число месяца. Сброс не требуется.")
-    #     return
-
+    # Проверка: если сейчас **не** 00:00, выход из скрипта
     now = datetime.now()
-    if now.hour != 0 or now.minute != 0:
-        return  # Не 00:00 — выходим
+    if not (now.hour == 0 and now.minute == 0):
+        return
+
+    from datetime import datetime, timedelta
 
     DB_CONFIG = {
         'host': host,
@@ -4520,12 +4524,42 @@ def process_10():
         'port': 3306
     }
 
+    EXPIRATION_DAYS = 14
+
     try:
         conn = mysql.connector.connect(**DB_CONFIG)
-        cursor = conn.cursor()
-        cursor.execute("UPDATE notification SET service = 0")
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT ani, restrictions FROM notification")
+        rows = cursor.fetchall()
+
+        now = datetime.now()
+        updated_count = 0
+
+        for row in rows:
+            ani = row['ani']
+            raw_restrictions = row['restrictions']
+
+            try:
+                restrictions = json.loads(raw_restrictions)
+            except json.JSONDecodeError:
+                print(f"Ошибка разбора JSON в записи {ani}")
+                continue
+
+            filtered = [
+                r for r in restrictions
+                if 'date' in r and datetime.strptime(r['date'], '%Y-%m-%d') + timedelta(days=EXPIRATION_DAYS) > now
+            ]
+
+            if filtered != restrictions:
+                updated_json = json.dumps(filtered, ensure_ascii=False)
+                update_query = "UPDATE notification SET restrictions = %s WHERE ani = %s"
+                cursor.execute(update_query, (updated_json, ani))
+                updated_count += 1
+
         conn.commit()
-        print("Сброс услуг пользователей успешно выполнен.")
+        print(f"Обновлено записей: {updated_count}")
+
     except mysql.connector.Error as err:
         print(f"Ошибка MySQL: {err}")
     finally:
@@ -4542,14 +4576,13 @@ if __name__ == "__main__":
     process1 = Process(target=process_1)
     # process1.start()
     process2 = Process(target=process_2)
-    """НЕ НУЖНО"""
-    # process3 = Process(target=process_3)
-    process4 = Process(target=process_4)
+    # process3 = Process(target=process_3) # НЕ НУЖНО
+    # process4 = Process(target=process_4) # НЕ НУЖНО
     process5 = Process(target=process_5)
     process6 = Process(target=process_6)
     process7 = Process(target=process_7)
     process8 = Process(target=process_8)
-    # process9 = Process(target=process_9)
+    # process9 = Process(target=process_9) # НЕ НУЖНО
     process10 = Process(target=process_10)
 
     # process1.start()
@@ -4588,10 +4621,10 @@ if __name__ == "__main__":
             #     process3 = Process(target=process_3)
             #     process3.start()
             #     # process3.join()
-            elif not process4.is_alive():
-                process4 = Process(target=process_4)
-                process4.start()
-                # process4.join()
+            # elif not process4.is_alive():
+            #     process4 = Process(target=process_4)
+            #     process4.start()
+            #     # process4.join()
             elif not process5.is_alive():
                 process5 = Process(target=process_5)
                 process5.start()
@@ -4643,10 +4676,10 @@ if __name__ == "__main__":
             # process3.join()  # Ждем завершения процесса
             # print("Процесс 3 был завершен.")
 
-            print("Завершение процесса 4...")
-            process4.terminate()  # Принудительное завершение процесса
-            process4.join()  # Ждем завершения процесса
-            print("Процесс 4 был завершен.")
+            # print("Завершение процесса 4...")
+            # process4.terminate()  # Принудительное завершение процесса
+            # process4.join()  # Ждем завершения процесса
+            # print("Процесс 4 был завершен.")
 
             print("Завершение процесса 5...")
             process5.terminate()  # Принудительное завершение процесса
@@ -4696,10 +4729,10 @@ if __name__ == "__main__":
             # process3.join()  # Ждем завершения процесса
             # print("Процесс 3 был завершен.")
 
-            print("Завершение процесса 4...")
-            process4.terminate()  # Принудительное завершение процесса
-            process4.join()  # Ждем завершения процесса
-            print("Процесс 4 был завершен.")
+            # print("Завершение процесса 4...")
+            # process4.terminate()  # Принудительное завершение процесса
+            # process4.join()  # Ждем завершения процесса
+            # print("Процесс 4 был завершен.")
 
             print("Завершение процесса 5...")
             process5.terminate()  # Принудительное завершение процесса
