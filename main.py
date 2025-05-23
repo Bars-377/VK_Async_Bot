@@ -3847,7 +3847,7 @@ def process_1():
 
                 return await user_verification(user_id, message, users_info)
             elif res['code'] == 'no_record':
-                await message.answer('Вы привысили лимит записи на эту услугу')
+                await message.answer('На указанную дату вы уже записаны на данную услугу.')
                 return await user_verification(user_id, message, users_info)
             elif res['code'] == 'err_no_slots':
 
@@ -4509,12 +4509,12 @@ def process_8():
 """Очистка в restrictions просроченных талонов для возможности регистрации"""
 def process_10():
 
+    from datetime import datetime, timedelta
+
     # Проверка: если сейчас **не** 00:00, выход из скрипта
     now = datetime.now()
     if not (now.hour == 0 and now.minute == 0):
         return
-
-    from datetime import datetime, timedelta
 
     DB_CONFIG = {
         'host': host,

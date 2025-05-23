@@ -1115,6 +1115,8 @@ class base:
             else:
                 try:
                     restrictions = ast.literal_eval(raw)
+                    if not isinstance(restrictions, list):  # Проверяем, что restrictions - это список
+                        restrictions = []
                 except Exception as e:
                     print(f"[ERROR] Не удалось разобрать restrictions: {e}")
                     restrictions = []
