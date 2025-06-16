@@ -1965,6 +1965,7 @@ class base:
                 location_name = ''
                 location_address = ''
                 service_name = ''
+                service_id = ''
                 time = ''
                 talon_id = ''
                 esiaid = ''
@@ -1973,6 +1974,7 @@ class base:
                     location_name += str(talons['data'][i]['location']['name']) + ',  '
                     location_address += str(talons['data'][i]['location']['address']) + ',  '
                     service_name += str(talons['data'][i]['service']['name']) + ',  '
+                    service_id += str(talons['data'][i]['service']['id']) + ',  '
                     time += str(talons['data'][i]['time']) + ', '
                     talon_id += str(talons['data'][i]['id']) + ', '
                     esiaid += str(talons['data'][i]['customer'].get('esiaId', '')) + ', '
@@ -1982,6 +1984,7 @@ class base:
                 location_name = location_name.rsplit(',  ')[:-1]
                 location_address = location_address.rsplit(',  ')[:-1]
                 service_name = service_name.rsplit(',  ')[:-1]
+                service_id = service_id.rsplit(',  ')[:-1]
                 time = time.rsplit(', ')[:-1]
                 talon_id = talon_id.rsplit(', ')[:-1]
                 esiaid = esiaid.rsplit(', ')[:-1]
@@ -2025,6 +2028,7 @@ class base:
                     'service_name_time': service_name_time,
                     'talon_id': talon_id,
                     'esiaid': esiaid,
+                    'service_id': service_id,
                     'code': code,
                     'department': location_name,
                     'dates': dates,
@@ -2048,7 +2052,7 @@ class base:
 
         return res
 
-    async def delete_coupons(self, talon_id, esiaid, talon, department, date, time, phone_dummy, fio):
+    async def delete_coupons(self, service_id, talon_id, esiaid, talon, department, date, time, phone_dummy, fio):
         try:
             import requests
 
@@ -2079,6 +2083,39 @@ class base:
                     await db.delete('vkontakte_reg', f'sender = "{self.user_id}" AND date ="{date}" AND talon = "{talon}" AND department = "{department}"')
 
                     await db.delete('telegram_reg', f'ani IN (SELECT id_tb FROM notification WHERE id_vk = "{self.user_id}") AND date = "{date}" AND talon = "{talon}" AND department = "{department}"')
+
+                    # Получаем данные
+                    await db.cursor.execute("SELECT restrictions FROM notification WHERE id_vk = %s LIMIT 1", (self.user_id,))
+                    result = await db.cursor.fetchone()
+
+                    # Попытка безопасно прочитать список
+                    if result and result[0]:
+                        try:
+                            parsed = ast.literal_eval(result[0])
+                            if isinstance(parsed, list):
+                                current_restrictions = parsed
+                            else:
+                                current_restrictions = []
+                        except Exception:
+                            current_restrictions = []
+                    else:
+                        current_restrictions = []
+
+                    # Предположим, что usluga и date — значения, которые нужно удалить
+                    current_restrictions = [
+                        r for r in current_restrictions
+                        if not (r['service'] == service_id and r['date'] == date)
+                    ]
+
+                    # После удаления преобразуем обратно в строку, если нужно
+                    new_restrictions = str(current_restrictions)
+
+                    # Обновляем БД
+                    await db.cursor.execute(
+                        "UPDATE notification SET restrictions = %s WHERE id_vk = %s",
+                        (new_restrictions, self.user_id)
+                    )
+                    await db.connection.commit()
 
                     await db.close()
 

@@ -1682,6 +1682,7 @@ def process_1():
 
                     talon_id = list(ctx.get(f'{user_id}: talon_id_cache'))
                     esiaid = list(ctx.get(f'{user_id}: esiaid_cache'))
+                    service_id = list(ctx.get(f'{user_id}: service_id_cache'))
                     code = list(ctx.get(f'{user_id}: code_cache'))
                     department = list(ctx.get(f'{user_id}: department_cache'))
                     date = list(ctx.get(f'{user_id}: date_cache'))
@@ -1699,7 +1700,7 @@ def process_1():
                     else:
                         fio = f"{last_name} {first_name}"
 
-                    res = await base(user_id = user_id).delete_coupons(talon_id[index], esiaid[index], code[index], department[index], date[index], time[index], ctx.get(f'{user_id}: tel_cache'), fio)
+                    res = await base(user_id = user_id).delete_coupons(service_id[index], talon_id[index], esiaid[index], code[index], department[index], date[index], time[index], ctx.get(f'{user_id}: tel_cache'), fio)
 
                     ctx.set(f'{user_id}: code_counter', index + 1)
 
@@ -1713,12 +1714,14 @@ def process_1():
 
                         del talon_id[index]
                         del esiaid[index]
+                        del service_id[index]
                         del code[index]
                         del department[index]
                         del date[index]
 
                         ctx.set(f'{user_id}: talon_id_cache', talon_id)
                         ctx.set(f'{user_id}: esiaid_cache', esiaid)
+                        ctx.set(f'{user_id}: service_id_cache', service_id)
                         ctx.set(f'{user_id}: code_cache', code)
 
                         code = list(ctx.get(f'{user_id}: code_cache'))
@@ -1844,6 +1847,7 @@ def process_1():
 
                         ctx.set(f'{user_id}: talon_id_cache', answer['talon_id'])
                         ctx.set(f'{user_id}: esiaid_cache', answer['esiaid'])
+                        ctx.set(f'{user_id}: service_id_cache', answer['service_id'])
                         ctx.set(f'{user_id}: code_cache', answer['code'])
                         ctx.set(f'{user_id}: department_cache', answer['department'])
                         ctx.set(f'{user_id}: date_cache', answer['dates'])
@@ -2108,6 +2112,7 @@ def process_1():
 
                 ctx.set(f'{user_id}: talon_id_cache', answer['talon_id'])
                 ctx.set(f'{user_id}: esiaid_cache', answer['esiaid'])
+                ctx.set(f'{user_id}: service_id_cache', answer['service_id'])
                 ctx.set(f'{user_id}: code_cache', answer['code'])
                 ctx.set(f'{user_id}: department_cache', answer['department'])
                 ctx.set(f'{user_id}: date_cache', answer['dates'])
@@ -2135,6 +2140,7 @@ def process_1():
 
                 ctx.set(f'{user_id}: talon_id_cache', [payload_data.split('_')[2]])
                 ctx.set(f'{user_id}: esiaid_cache', [''])
+                ctx.set(f'{user_id}: service_id_cache', [''])
                 ctx.set(f'{user_id}: code_cache', [payload_data.split('_')[3]])
                 ctx.set(f'{user_id}: department_cache', [payload_data.split('_')[4]])
                 ctx.set(f'{user_id}: date_cache', [payload_data.split('_')[5]])
@@ -3975,6 +3981,7 @@ def process_1():
 
                     ctx.set(f'{user_id}: talon_id_cache', [payload_data.split('_')[2]])
                     ctx.set(f'{user_id}: esiaid_cache', [''])
+                    ctx.set(f'{user_id}: service_id_cache', [''])
                     ctx.set(f'{user_id}: code_cache', [payload_data.split('_')[3]])
                     ctx.set(f'{user_id}: department_cache', [payload_data.split('_')[4]])
                     ctx.set(f'{user_id}: date_cache', [payload_data.split('_')[5]])
