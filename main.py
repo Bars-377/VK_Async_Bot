@@ -57,6 +57,18 @@ from vkbottle import Keyboard, KeyboardButtonColor, Text
 
 def process_1():
 
+    async def com(message):
+        try:
+            # Предполагаем, что message.payload - это строка JSON
+            payload_data = json.loads(message.payload)
+
+            # Попробуем получить 'cmd', если его нет, то 'command'
+            cmd = payload_data.get('cmd') or payload_data.get('command')
+            return cmd
+        except Exception as e:
+            print('Ошибка в функции def com', e)
+            return None
+
     ctx = CtxStorage()
     bot = Bot(token=config["VKONTAKTE"]["token"])
 
@@ -317,7 +329,9 @@ def process_1():
                 return await user_verification(user_id, message, users_info)
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
 
                 if payload_data == '1' and ctx.get(f'{user_id}: number_employee') != 'None':
                     ctx.set(f"{user_id}: number_review", '')
@@ -412,7 +426,9 @@ def process_1():
             users_info = await bot.api.users.get(user_ids=[user_id])
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
 
                 if payload_data == 'back' or payload_data == 'menu':
 
@@ -471,7 +487,9 @@ def process_1():
             users_info = await bot.api.users.get(user_ids=[user_id])
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
 
                 commands_1 = {
                     'soc_sphere': buttons.services_social,
@@ -580,7 +598,9 @@ def process_1():
             users_info = await bot.api.users.get(user_ids=[user_id])
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
                 if payload_data == 'menu' or payload_data == 'back':
 
                     return await user_verification(user_id, message, users_info)
@@ -620,7 +640,9 @@ def process_1():
             users_info = await bot.api.users.get(user_ids=[user_id])
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
                 if payload_data == 'menu' or payload_data == 'back':
 
                     return await user_verification(user_id, message, users_info)
@@ -781,7 +803,9 @@ def process_1():
                     return await message.answer(loaded_data['1'])
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
 
                 if payload_data == 'yes':
                     await agreement_scenario_outside(1)
@@ -831,7 +855,9 @@ def process_1():
             users_info = await bot.api.users.get(user_ids=[user_id])
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
                 if payload_data == 'menu' or payload_data == 'back':
 
                     SSR = (ctx.get(f'{user_id}: department'),
@@ -892,7 +918,9 @@ def process_1():
             users_info = await bot.api.users.get(user_ids=[user_id])
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
                 if payload_data == 'menu' or payload_data == 'back':
 
                     return await user_verification(user_id, message, users_info)
@@ -953,7 +981,9 @@ def process_1():
             users_info = await bot.api.users.get(user_ids=[user_id])
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
 
                 commands_1 = {
                     'tomsk_obl': {
@@ -1318,7 +1348,9 @@ def process_1():
             users_info = await bot.api.users.get(user_ids=[user_id])
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
 
                 if ctx.get(f'{user_id}: event_location') == 'tomsk':
                     if payload_data == 'yes':
@@ -1398,7 +1430,9 @@ def process_1():
             users_info = await bot.api.users.get(user_ids=[user_id])
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
 
                 commands_1 = {
                     'cons_mvd': {
@@ -1623,7 +1657,9 @@ def process_1():
             users_info = await bot.api.users.get(user_ids=[user_id])
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
                 if payload_data == 'menu' or payload_data == 'back':
 
                     return await user_verification(user_id, message, users_info)
@@ -1722,8 +1758,10 @@ def process_1():
                     keyboard = await buttons.yes_no()
                     return await message.answer(f"Вы точно хотите удалить талон {code[index]}", keyboard=keyboard)
             except TypeError:
+                if message.payload == '{"command":"start"}':
+                    return await user_verification(user_id, message, users_info)
                 keyboard = await buttons.menu_menu()
-                return await message.answer("Вы ввели некорректные данные", keyboard=keyboard)
+                return await message.answer(loaded_data['40'], keyboard=keyboard)
             await debug_print('ВЫХОД ИЗ ФУНКЦИИ delete_coupons', user_id)
             return
         except Exception as e:
@@ -1801,7 +1839,9 @@ def process_1():
                 ctx.set(f'{user_id}: {field}', 'None')
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
             except TypeError:
                 pattern_telephone = r'^(8|\+7)[0-9]{10}$'
                 if re.match(pattern_telephone, message.text):
@@ -1852,6 +1892,8 @@ def process_1():
                         keyboard = await buttons.menu_menu()
                         return await message.answer(loaded_data['39'], keyboard=keyboard)
                 else:
+                    if message.payload == '{"command":"start"}':
+                        return await user_verification(user_id, message, users_info)
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['40'], keyboard=keyboard)
 
@@ -2108,6 +2150,8 @@ def process_1():
                 # keyboard = await buttons.yes_no()
                 return await del_coupons(user_id, payload_data, message)
             else:
+                if message.payload == '{"command":"start"}':
+                    return await user_verification(user_id, message, users_info)
                 await message.answer(loaded_data['40'])
 
                 return await user_verification(user_id, message, users_info)
@@ -2133,8 +2177,12 @@ def process_1():
 
             users_info = await bot.api.users.get(user_ids=[user_id])
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
             except TypeError:
+                if message.payload == '{"command":"start"}':
+                    return await user_verification(user_id, message, users_info)
                 keyboard = await buttons.menu_menu()
                 return await message.answer(loaded_data['40'], keyboard=keyboard)
 
@@ -2340,7 +2388,9 @@ def process_1():
             await debug_print('ВХОД В ФУНКЦИЮ svo', user_id)
             users_info = await bot.api.users.get(user_ids=[user_id])
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
 
                 if payload_data == 'menu':
                     ctx.set(f'{user_id}: svo_', '')
@@ -2548,7 +2598,9 @@ def process_1():
             await debug_print('ВХОД В ФУНКЦИЮ service', user_id)
             users_info = await bot.api.users.get(user_ids=[user_id])
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
 
                 if payload_data == 'yes':
                     await message.answer(loaded_data['60'])
@@ -2738,9 +2790,10 @@ def process_1():
                             keyboard = await buttons.menu_menu_file()
                             await message.answer(f"{file[1]}", keyboard=keyboard)
                             return
-
+                if message.payload == '{"command":"start"}':
+                    return await user_verification(user_id, message, users_info)
                 keyboard = await buttons.menu_menu()
-                return await message.answer("Вы ввели некорректные данные 111", keyboard=keyboard)
+                return await message.answer(loaded_data['40'], keyboard=keyboard)
 
             if payload_data == 'back' or payload_data == 'filials':
 
@@ -2919,7 +2972,9 @@ def process_1():
             SSR = (date, time, department, service)
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
 
                 if payload_data == 'back':
 
@@ -2992,8 +3047,11 @@ def process_1():
                     field_3 = ctx.get(f'{user_id}: field_3')
                     payload_data = 'yes'
                 else:
+                    if message.payload == '{"command":"start"}':
+                        return await user_verification(user_id, message, users_info)
                     keyboard = await buttons.menu_menu()
-                    return await message.answer("Вы ввели некорректные данные", keyboard=keyboard)
+                    print('FDSFSDFSDFSD')
+                    return await message.answer(loaded_data['40'], keyboard=keyboard)
 
             if service_id == '52cc58f4-2f75-46b2-8065-abe1c6ed6889' and field_1 == 'None':
                 ctx.set(f'{user_id}: field_1', payload_data)
@@ -3198,10 +3256,14 @@ def process_1():
             await debug_print('ВХОД В ФУНКЦИЮ handler_date', user_id)
             users_info = await bot.api.users.get(user_ids=[user_id])
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
             except TypeError:
+                if message.payload == '{"command":"start"}':
+                    return await user_verification(user_id, message, users_info)
                 keyboard = await buttons.menu_menu()
-                return await message.answer("Вы ввели некорректные данные", keyboard=keyboard)
+                return await message.answer(loaded_data['40'], keyboard=keyboard)
 
             if payload_data == 'date_ost':
                 SSR = (ctx.get(f'{user_id}: date'),
@@ -3274,10 +3336,14 @@ def process_1():
             await debug_print('ВХОД В ФУНКЦИЮ handler_time', user_id)
             users_info = await bot.api.users.get(user_ids=[user_id])
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
             except TypeError:
+                if message.payload == '{"command":"start"}':
+                    return await user_verification(user_id, message, users_info)
                 keyboard = await buttons.menu_menu()
-                return await message.answer("Вы ввели некорректные данные", keyboard=keyboard)
+                return await message.answer(loaded_data['40'], keyboard=keyboard)
 
             await change_ctx(user_id)
             SSR = (ctx.get(f'{user_id}: department'),
@@ -3398,7 +3464,9 @@ def process_1():
             user_text = None
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
                 if payload_data == 'back':
                     ctx.set(f'{user_id}: time', 'None')
                     await bot.state_dispenser.set(message.peer_id, SuperStates.TIME)
@@ -3512,7 +3580,9 @@ def process_1():
         #     return keyboard
 
         # try:
-        #     payload_data = eval(message.payload)['cmd']
+        #     payload_data = await com(message)
+        #     if payload_data == None:
+        #         raise TypeError
         #     ctx.set(f'{user_id}: payload_data', payload_data)
         # except TypeError:
         #     payload_data = None
@@ -3577,7 +3647,9 @@ def process_1():
             users_info = await bot.api.users.get(user_ids=[user_id])
 
             try:
-                payload_data = eval(message.payload)['cmd']
+                payload_data = await com(message)
+                if payload_data == None:
+                    raise TypeError
 
                 if payload_data.startswith('delete_coupons_'):
                     # ctx.set(f'{user_id}: yes_no_cache', 'yes')
