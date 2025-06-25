@@ -1182,7 +1182,8 @@ class base:
                                 service=f'{await get_key_by_value(services, usluga)}',
                                 uuid=f'{response_res["data"]["uuid"]}',
                                 tel=f'{self.tel}',
-                                fio=f'{fio}')
+                                fio=f'{fio}',
+                                service_id=f'{usluga}')
 
                 await db.insert('registration',
                                 fio=f'{fio}',
@@ -2194,7 +2195,7 @@ class base:
             db = Database(*SSR)
             await db.connect()
 
-            result = await db.search('*', 'vkontakte_reg', f'sender = "{self.user_id}" AND date = "{str(date_formatted)}" AND now = "yes"')
+            result = await db.search('sender, talon, time, date, department, service, uuid, tel, fio, now, service_id', 'vkontakte_reg', f'sender = "{self.user_id}" AND date = "{str(date_formatted)}" AND now = "yes"')
 
             await db.close()
 
@@ -2213,8 +2214,9 @@ class base:
             #             f"SELECT * FROM vkontakte_reg WHERE sender = '{self.user_id}' AND date = '{str(date_formatted)}' AND now = 'yes'"
             #         )
             #         result = await cursor.fetchall()
-
-            return result
+            if not result == [] and result != ():
+                return result[0][0], result[0][1], result[0][2], result[0][3], result[0][4], result[0][5], result[0][6], result[0][7], result[0][8], result[0][9], result[0][10]
+            return None
         except Exception as e:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")

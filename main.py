@@ -204,33 +204,38 @@ def process_1():
             # mem_usage = process.memory_info().rss / (1024 * 1024)
             # logger.info(f"Использование памяти 2: {mem_usage} МБ")
 
-    async def notification_delete_coupon(user_id, message):
+    async def notification_delete_coupon(user_id, message, result):
         await debug_print('ВХОД В ФУНКЦИЮ notification_delete_coupon', user_id)
-        result = await base(user_id = user_id).select_vkontakte_reg()
+        # result = await base(user_id = user_id).select_vkontakte_reg()
 
-        if not result == [] and result != ():
+        # if not result == [] and result != ():
 
-            date = result[0][3]
-            time_ = result[0][2]
-            talon = result[0][1]
-            department = result[0][4]
-            service = result[0][5]
-            uuid = result[0][6]
-            tel = result[0][7]
-            fio = result[0][8]
-            ctx.set(f'{user_id}: talon_select_vkontakte_reg', talon)
-            ctx.set(f'{user_id}: department_select_vkontakte_reg', department)
+        print('FSDAFDSFSSFDFDSFSDFFDFDS')
 
-            keyboard = await buttons.delete_coupon(uuid, talon, department, date, tel, fio)
-            await debug_print('ВЫХОД ИЗ ФУНКЦИИ notification_delete_coupon', user_id)
-            formatted_message = loaded_data['2'].format(talon=talon, department=department, service=service, date=date, time_=time_)
-            return await message.answer(formatted_message, keyboard=keyboard)
+        talon = result[1]
+        time_ = result[2]
+        date = result[3]
+        department = result[4]
+        service = result[5]
+        uuid = result[6]
+        tel = result[7]
+        fio = result[8]
+        service_id = result[10]
+        ctx.set(f'{user_id}: talon_select_vkontakte_reg', talon)
+        ctx.set(f'{user_id}: department_select_vkontakte_reg', department)
+
+        keyboard = await buttons.delete_coupon(uuid, talon, department, date, tel, fio, time_, service_id)
         await debug_print('ВЫХОД ИЗ ФУНКЦИИ notification_delete_coupon', user_id)
+        formatted_message = loaded_data['2'].format(talon=talon, department=department, service=service, date=date, time_=time_)
+        return await message.answer(formatted_message, keyboard=keyboard)
+        # await debug_print('ВЫХОД ИЗ ФУНКЦИИ notification_delete_coupon', user_id)
 
     # while True:
         # try:
     async def user_verification(user_id, message, users_info):
-        await notification_delete_coupon(user_id, message)
+        result = await base(user_id = user_id).select_vkontakte_reg()
+        if result:
+            return await notification_delete_coupon(user_id, message, result)
 
         answer = await base(user_id = user_id).phone_select()
 
@@ -1680,7 +1685,15 @@ def process_1():
                     date = list(ctx.get(f'{user_id}: date_cache'))
                     time = list(ctx.get(f'{user_id}: time_cache'))
 
-                    index = ctx.get(f'{user_id}: code_counter')
+                    # print(talon_id)
+                    # print(esiaid)
+                    # print(service_id)
+                    # print(code)
+                    # print(department)
+                    # print(date)
+                    # print(time)
+
+                    index = int(ctx.get(f'{user_id}: code_counter'))
 
                     code_cache = code[index]
 
@@ -1718,10 +1731,10 @@ def process_1():
 
                         code = list(ctx.get(f'{user_id}: code_cache'))
 
-                        index = ctx.get(f'{user_id}: code_counter')
+                        index = int(ctx.get(f'{user_id}: code_counter'))
                         if len(code) <= index:
                             ctx.set(f'{user_id}: code_counter', 0)
-                            index = ctx.get(f'{user_id}: code_counter')
+                            index = int(ctx.get(f'{user_id}: code_counter'))
 
                         if code == []:
                             await message.answer(f"Ваш талон {code_cache} успешно удалён.\n\nПо вашем данным талонов больше нет.")
@@ -1738,9 +1751,9 @@ def process_1():
 
                     code = list(ctx.get(f'{user_id}: code_cache'))
 
-                    counter = ctx.get(f'{user_id}: code_counter')
+                    counter = int(ctx.get(f'{user_id}: code_counter'))
                     ctx.set(f'{user_id}: code_counter', counter + 1)
-                    counter = ctx.get(f'{user_id}: code_counter')
+                    counter = int(ctx.get(f'{user_id}: code_counter'))
 
                     if counter >= len(code):
                         await message.answer(loaded_data['37'])
@@ -1753,7 +1766,7 @@ def process_1():
                     ctx.set(f'{user_id}: yes_no_cache', 'yes')
                     code = list(ctx.get(f'{user_id}: code_cache'))
 
-                    index = ctx.get(f'{user_id}: code_counter')
+                    index = int(ctx.get(f'{user_id}: code_counter'))
 
                     keyboard = await buttons.yes_no()
                     return await message.answer(f"Вы точно хотите удалить талон {code[index]}", keyboard=keyboard)
@@ -1770,15 +1783,47 @@ def process_1():
     async def del_coupons(user_id, payload_data, message: Message):
         ctx.set(f'{user_id}: yes_no_cache', 'yes')
 
+        # print(payload_data)
+
         ctx.set(f'{user_id}: talon_id_cache', [payload_data.split('_')[2]])
+
+        # print('talon_id_cache', list(ctx.get(f'{user_id}: talon_id_cache')))
+
         ctx.set(f'{user_id}: esiaid_cache', [''])
-        ctx.set(f'{user_id}: service_id_cache', [''])
+
+        # print('esiaid_cache', list(ctx.get(f'{user_id}: esiaid_cache')))
+
+        ctx.set(f'{user_id}: service_id_cache', [payload_data.split('_')[9]])
+
+        # print('service_id_cache', list(ctx.get(f'{user_id}: service_id_cache')))
+
         ctx.set(f'{user_id}: code_cache', [payload_data.split('_')[3]])
+
+        # print('code_cache', list(ctx.get(f'{user_id}: code_cache')))
+
         ctx.set(f'{user_id}: department_cache', [payload_data.split('_')[4]])
+
+        # print('department_cache', list(ctx.get(f'{user_id}: department_cache')))
+
         ctx.set(f'{user_id}: date_cache', [payload_data.split('_')[5]])
-        ctx.set(f'{user_id}: code_counter', 0)
+
+        # print('date_cache', list(ctx.get(f'{user_id}: date_cache')))
+
+        ctx.set(f'{user_id}: code_counter', '0')
+
+        # print('code_counter', int(ctx.get(f'{user_id}: code_counter')))
+
         ctx.set(f'{user_id}: tel_cache', payload_data.split('_')[6])
+
+        # print('tel_cache', ctx.get(f'{user_id}: tel_cache'))
+
         ctx.set(f'{user_id}: fio', payload_data.split('_')[7])
+
+        # print('fio', ctx.get(f'{user_id}: fio'))
+
+        ctx.set(f'{user_id}: time_cache', [payload_data.split('_')[8]])
+
+        # print('time_cache', list(ctx.get(f'{user_id}: time_cache')))
 
         await bot.state_dispenser.set(message.peer_id, SuperStates.DEL_COUPONS)
         keyboard = await buttons.yes_no()
@@ -1880,10 +1925,10 @@ def process_1():
 
                         code = ctx.get(f'{user_id}: code_cache')
 
-                        index = ctx.get(f'{user_id}: code_counter')
+                        index = int(ctx.get(f'{user_id}: code_counter'))
                         if index == -1:
                             ctx.set(f'{user_id}: code_counter', 0)
-                            index = ctx.get(f'{user_id}: code_counter')
+                            index = int(ctx.get(f'{user_id}: code_counter'))
 
                         keyboard = await buttons.yes_no()
 
@@ -2118,10 +2163,10 @@ def process_1():
 
                 code = ctx.get(f'{user_id}: code_cache')
 
-                index = ctx.get(f'{user_id}: code_counter')
+                index = int(ctx.get(f'{user_id}: code_counter'))
                 if index == -1:
                     ctx.set(f'{user_id}: code_counter', 0)
-                    index = ctx.get(f'{user_id}: code_counter')
+                    index = int(ctx.get(f'{user_id}: code_counter'))
 
                 keyboard = await buttons.yes_no()
                 return await message.answer(f"{answer['service_name_time']}.\n\nХотите ли удалить талон {code[index]}", keyboard=keyboard)
@@ -3050,7 +3095,6 @@ def process_1():
                     if message.payload == '{"command":"start"}':
                         return await user_verification(user_id, message, users_info)
                     keyboard = await buttons.menu_menu()
-                    print('FDSFSDFSDFSD')
                     return await message.answer(loaded_data['40'], keyboard=keyboard)
 
             if service_id == '52cc58f4-2f75-46b2-8065-abe1c6ed6889' and field_1 == 'None':
@@ -3720,8 +3764,8 @@ import time
 
 import datetime
 
-"""Уведолмение о приёме в telegram"""
 def process_5():
+    """Уведолмение о приёме в telegram"""
     def post_message(ani, talon, time, date, department, service):
 
         message = f"У вас скоро приём {date} в {time}! Номер вашего талона: {talon}, филиал: {department}, услуга: {service}.\n\nНажмите /start для того, что бы подтвердить или удалить вашу запись."
@@ -3812,8 +3856,8 @@ def process_5():
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
-"""Уведолмение о приёме в VKONTAKTE"""
 def process_2():
+    """Уведолмение о приёме в VKONTAKTE"""
     def post_message(user_id, talon, time, date, department, service, uuid, tel, fio):
         # Данные для авторизации
         access_token = config["VKONTAKTE"]["token"]
@@ -3947,8 +3991,8 @@ def process_2():
 
 from mysql.connector import errors
 
-"""Уведомление на событие"""
 def process_4():
+    """Уведомление на событие"""
     def post_message(user_id_vk, user_id_tb, event, date, platform, now):
 
         import re
@@ -4078,8 +4122,8 @@ def custom_random():
     next_number = (1103515245 * seed + 12345) % 2**31  # Простой линейный конгруэнтный генератор
     return next_number
 
-"""Создаёт кнопку возврата к боту"""
 def process_3():
+    """Создаёт кнопку возврата к боту"""
     token=config["VKONTAKTE"]["token"]
     bot = Bot(token=token)
 
@@ -4173,8 +4217,8 @@ def process_8():
 #         with open(filename_mail, 'w') as file:
 #             file.write("")
 
-"""Очистка в restrictions просроченных талонов для возможности регистрации"""
 def process_10():
+    """Очистка в restrictions просроченных талонов для возможности регистрации"""
 
     from datetime import datetime, timedelta
 

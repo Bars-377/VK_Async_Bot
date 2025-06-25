@@ -1182,10 +1182,10 @@ class buttons:
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
-    async def delete_coupon(uuid, talon, department, date, tel, fio):
+    async def delete_coupon(uuid, talon, department, date, tel, fio, time, service_id):
         try:
             keyboard = Keyboard(one_time=True, inline=False)
-            keyboard.add(Text("Удалить запись", {"cmd": f"delete_coupons_{uuid}_{talon}_{department}_{date}_{tel}_{fio}"}),color=KeyboardButtonColor.NEGATIVE)
+            keyboard.add(Text("Удалить запись", {"cmd": f"delete_coupons_{uuid}_{talon}_{department}_{date}_{tel}_{fio}_{time}_{service_id}"}),color=KeyboardButtonColor.NEGATIVE)
             keyboard.add(Text("Я приду", {"cmd": "accept_entry"}), color=KeyboardButtonColor.POSITIVE)
             keyboard = keyboard.get_json()
             return keyboard
