@@ -1,0 +1,187 @@
+{
+    "button_start": {
+        "text": "Начать",
+        "color": "primary",
+        "command": "question1"
+    },
+    "button_question1": {
+        "text": "Вопрос 2",
+        "color": "secondary",
+        "command": "question2"
+    },
+    "button_question2": {
+        "text": "Вопрос 3",
+        "color": "primary",
+        "command": "question3"
+    },
+    "button_question3": {
+        "text": "Вопрос 4",
+        "color": "secondary",
+        "command": "question4"
+    },
+    "button_back": {
+        "text": "Назад",
+        "color": "negative",
+        "command": "back"
+    },
+    "button_menu": {
+        "text": "В главное меню",
+        "color": "primary",
+        "command": "menu"
+    },
+    "button_consultation_1": {
+        "text": "Услуги МВД / ГИБДД",
+        "color": "positive",
+        "command": "cons_mvd"
+    },
+    "button_consultation_2": {
+        "text": "СНИЛС, ИНН, ОМС",
+        "color": "positive",
+        "command": "cons_snils_inn_oms"
+    },
+    "button_consultation_3": {
+        "text": "ЗАГС",
+        "color": "positive",
+        "command": "cons_zags"
+    },
+    "button_consultation_4": {
+        "text": "Удостоверение многодетной семьи",
+        "color": "positive",
+        "command": "cons_mnog"
+    },
+    "button_consultation_5": {
+        "text": "Назначение пенсии",
+        "color": "positive",
+        "command": "cons_pens"
+    },
+    "button_consultation_6": {
+        "text": "Сертификат на газификацию",
+        "color": "positive",
+        "command": "cons_sert"
+    },
+    "button_consultation_7": {
+        "text": "Оформление единого пособия",
+        "color": "positive",
+        "command": "cons_edin"
+    },
+    "button_consultation_8": {
+        "text": "Направление ребёнка в детский сад",
+        "color": "positive",
+        "command": "cons_detsk"
+    },
+    "button_consultation_9": {
+        "text": "Далее",
+        "color": "positive",
+        "command": "cons_other"
+    },
+    "button_consultation_mvd_1": {
+        "text": "Паспорт Гражданина РФ",
+        "color": "positive",
+        "command": "cons_pasp"
+    },
+    "button_consultation_mvd_2": {
+        "text": "Регистрационный учёт граждан",
+        "color": "positive",
+        "command": "cons_reg"
+    },
+    "button_consultation_mvd_3": {
+        "text": "Справка из ИЦ УМВД",
+        "color": "positive",
+        "command": "cons_sprav"
+    },
+    "button_consultation_mvd_4": {
+        "text": "Заграничный паспорт",
+        "color": "positive",
+        "command": "cons_zagr"
+    },
+    "button_consultation_mvd_5": {
+        "text": "Водительское удостоверение",
+        "color": "positive",
+        "command": "cons_vod"
+    },
+    "consultation_snils_inn_oms_1": {
+        "text": "СНИЛС",
+        "color": "positive",
+        "command": "cons_snils"
+    },
+    "consultation_snils_inn_oms_2": {
+        "text": "ИНН",
+        "color": "positive",
+        "command": "cons_inn"
+    },
+    "consultation_snils_inn_oms_3": {
+        "text": "Полис (ОМС)",
+        "color": "positive",
+        "command": "cons_polis"
+    },
+    "consultation_zags_1": {
+        "text": "Регистрация/расторжение брака",
+        "color": "positive",
+        "command": "cons_brak"
+    },
+    "consultation_zags_2": {
+        "text": "Свидетельство о рождении ребёнка",
+        "color": "positive",
+        "command": "cons_rojd"
+    },
+    "cons_zagr_1": {
+        "text": "Срок действия 5 лет",
+        "color": "positive",
+        "command": "cons_zagr_5"
+    },
+    "cons_zagr_2": {
+        "text": "Срок действия 10 лет",
+        "color": "positive",
+        "command": "cons_zagr_10"
+    },
+    "button_question4": {
+        "text": "Закончить",
+        "color": "negative",
+        "command": "start"
+    },
+    "button_question4": {
+        "text": "Закончить",
+        "color": "negative",
+        "command": "start"
+    },
+    "button_question4": {
+        "text": "Закончить",
+        "color": "negative",
+        "command": "start"
+    },
+    "button_question4": {
+        "text": "Закончить",
+        "color": "negative",
+        "command": "start"
+    },
+    "button_question4": {
+        "text": "Закончить",
+        "color": "negative",
+        "command": "start"
+    },
+    "button_question4": {
+        "text": "Закончить",
+        "color": "negative",
+        "command": "start"
+    },
+    "button_question4": {
+        "text": "Закончить",
+        "color": "negative",
+        "command": "start"
+    },
+    "button_question4": {
+        "text": "Закончить",
+        "color": "negative",
+        "command": "start"
+    },
+    "button_question4": {
+        "text": "Закончить",
+        "color": "negative",
+        "command": "start"
+    },
+    "button_question4": {
+        "text": "Закончить",
+        "color": "negative",
+        "command": "start"
+    }
+}
