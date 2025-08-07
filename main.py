@@ -1085,7 +1085,7 @@ def process_1():
                     },
                     'filial': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'keyboard': await buttons.filials()}
+                        'args': {'message': message, 'keyboard': await buttons.filials('54321')}
                     },
 
                     'kirovskiy': {
@@ -1109,9 +1109,9 @@ def process_1():
                         'func': cons_payload_data,
                         'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'tomsk' / 'akadem.txt', 'keyboard': await buttons.tomsk()}
                     },
-                    'mfc_business': {
+                    'dom-predprinimatelya': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tomsk' / 'COU_business.txt', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'tomsk' / 'COU_business.txt', 'keyboard': await buttons.tomsk()}
                     },
                     'asinovskiy': {
                         'func': cons_payload_data,
