@@ -384,25 +384,39 @@ def process_1():
                     return await number_review()
 
                 pattern_number_statement = r'\d{2}/\d{4}/\d{1,10}'
-                pattern_date = r'\d{4}-\d{2}-\d{2}'
+                # pattern_date = r'\d{4}-\d{2}-\d{2}'
 
                 if ctx.get(f'{user_id}: number_statement') == 'None' and re.search(pattern_number_statement, message.text):
+
+                    res = await base().search_cpgu_order(message.text)
+                    if not res:
+                        keyboard = await buttons.menu_menu()
+                        await message.answer(f"Данное заявление в базе не найдено")
+                        return await message.answer(loaded_data['10'], keyboard=keyboard)
+
+                    ctx.set(f"{user_id}: number_date", res)
+
                     ctx.set(f"{user_id}: number_statement", re.search(pattern_number_statement, message.text).group())
 
                     cache_text = str(message.text).split('/')[0]
                     try:
                         ctx.set(f"{user_id}: number_department", bid_locations[re.search(pattern_number_statement, message.text).group()[0:2]])
                     except:
+                        ctx.set(f"{user_id}: number_statement", 'None')
                         keyboard = await buttons.menu_menu()
                         await message.answer(f"Код {cache_text} не найден")
                         return await message.answer(loaded_data['10'], keyboard=keyboard)
 
-                    keyboard = await buttons.menu_menu()
-                    return await message.answer(loaded_data['11'], keyboard=keyboard)
-                elif ctx.get(f'{user_id}: number_date') == 'None' and re.search(pattern_date, message.text):
-                    ctx.set(f"{user_id}: number_date", re.search(pattern_date, message.text).group())
                     keyboard = await buttons.reception()
                     return await message.answer(loaded_data['12'], keyboard=keyboard)
+
+                    # keyboard = await buttons.menu_menu()
+                    # return await message.answer(loaded_data['11'], keyboard=keyboard)
+
+                # elif ctx.get(f'{user_id}: number_date') == 'None' and re.search(pattern_date, message.text):
+                #     ctx.set(f"{user_id}: number_date", re.search(pattern_date, message.text).group())
+                #     keyboard = await buttons.reception()
+                #     return await message.answer(loaded_data['12'], keyboard=keyboard)
 
                 else:
                     keyboard = await buttons.menu_menu()
@@ -827,17 +841,47 @@ def process_1():
         except Exception as e:
             await errors(message, e)
 
+    async def upload_photo_from_url(url: str, message: Message) -> str:
+
+        from vkbottle.tools import PhotoMessageUploader
+
+        def get_file_extension_from_url(url: str) -> str:
+            return Path(url).suffix.lstrip(".") or "jpg"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    content = await resp.read()
+                    ext = get_file_extension_from_url(url)
+                    uploader = PhotoMessageUploader(message.ctx_api)
+                    photo = await uploader.upload(
+                        file_source=content,
+                        peer_id=message.peer_id,
+                        extension=ext
+                    )
+                    return photo
+                else:
+                    raise Exception(f"Не удалось скачать изображение. Код: {resp.status}")
+
     async def cons_payload_data(message, photo=None, keyboard=None, file=None):
-        if photo and file:
-            return await message.answer(f"{await read_file(file)}", keyboard=keyboard, attachment=photo)
-        elif file:
+        url_schedule = 'http://172.18.11.104:8001/api/v1/filials/chart/'
+        if photo and file and not isinstance(photo, tuple):
+            ph = await upload_photo_from_url(f"{url_schedule}/{photo}", message)
+            return await message.answer(f"{await read_file(file)}", keyboard=keyboard, attachment=ph)
+        elif file and not photo:
             return await message.answer(f"{await read_file(file)}", keyboard=keyboard)
-        elif photo:
-            if isinstance(photo, tuple):
-                for i in range(len(photo)-1):
-                    await message.answer("ㅤ", keyboard=keyboard, attachment=photo[i])
-                return await message.answer("ㅤ", keyboard=keyboard, attachment=photo[len(photo)-1])
-            return await message.answer("ㅤ", keyboard=keyboard, attachment=photo)
+        elif photo and not file:
+            ph = await upload_photo_from_url(f"{url_schedule}/{photo}", message)
+            return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+        elif isinstance(photo, tuple):
+            for i in range(len(photo)-1):
+                ph = await upload_photo_from_url(f"{url_schedule}/{photo[i]}", message)
+                await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+            ph = await upload_photo_from_url(f"{url_schedule}/{photo[-1]}", message)
+            if not file:
+                return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+            else:
+                return await message.answer(f"{await read_file(file)}", keyboard=keyboard, attachment=ph)
         else:
             return await message.answer("Выберите раздел", keyboard=keyboard)
 
@@ -1044,270 +1088,263 @@ def process_1():
                         'args': {'message': message, 'keyboard': await buttons.filials()}
                     },
 
-                    'frunze': {
+                    'kirovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239773', 'file': Path('files_gr') / 'tomsk' / 'kirovskiy.txt', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'tomsk' / 'kirovskiy.txt', 'keyboard': await buttons.tomsk()}
                     },
-                    'derb': {
+
+                    'leninskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239777', 'file': Path('files_gr') / 'tomsk' / 'leninskiy.txt', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'tomsk' / 'leninskiy.txt', 'keyboard': await buttons.tomsk()}
                     },
-                    'pushk': {
+                    'oktyabrskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239780', 'file': Path('files_gr') / 'tomsk' / 'oktyabrskiy.txt', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'tomsk' / 'oktyabrskiy.txt', 'keyboard': await buttons.tomsk()}
                     },
-                    'tvers': {
+                    'sovetskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239785', 'file': Path('files_gr') / 'tomsk' / 'sovetskiy.txt', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'tomsk' / 'sovetskiy.txt', 'keyboard': await buttons.tomsk()}
                     },
-                    'razv': {
+                    'oez-tvt': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239788', 'file': Path('files_gr') / 'tomsk' / 'akadem.txt', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'tomsk' / 'akadem.txt', 'keyboard': await buttons.tomsk()}
                     },
                     'mfc_business': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tomsk' / 'COU_business.txt', 'keyboard': await buttons.tomsk()}
                     },
-                    'asino': {
+                    'asinovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239770', 'file': Path('files_gr') / 'to' / 'asino.txt', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'asino.txt', 'keyboard': await buttons.tomsk_obl()}
                     },
-                    'cedar': {
+                    'g-kedrovyy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239772', 'file': Path('files_gr') / 'to' / 'kedtovij.txt', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'kedtovij.txt', 'keyboard': await buttons.tomsk_obl()}
                     },
-                    'strez': {
+                    'strezhevoy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239786', 'file': Path('files_gr') / 'to' / 'strezhevoj.txt', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'strezhevoj.txt', 'keyboard': await buttons.tomsk_obl()}
                     },
-                    'zato': {
+                    'zato-seversk': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239783', 'file': Path('files_gr') / 'to' / 'seversk.txt', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'seversk.txt', 'keyboard': await buttons.tomsk_obl()}
                     },
-                    'ziryansk': {
+                    'zyryanskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239790', 'file': Path('files_gr') / 'to' / 'ziryanskij.txt', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'ziryanskij.txt', 'keyboard': await buttons.tomsk_obl()}
                     },
                     'parabel': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239781', 'file': Path('files_gr') / 'to' / 'parabel.txt', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'parabel.txt', 'keyboard': await buttons.tomsk_obl()}
                     },
-                    'balyar': {
+                    'verhneketskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239789', 'file': Path('files_gr') / 'to' / 'verhneketskij.txt', 'keyboard': await buttons.tomsk_obl_1()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'verhneketskij.txt', 'keyboard': await buttons.tomsk_obl_1()}
                     },
-                    'alex': {
+                    'aleksandrovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239769', 'file': Path('files_gr') / 'to' / 'aleksandrovskij.txt', 'keyboard': await buttons.tomsk_obl_1()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'aleksandrovskij.txt', 'keyboard': await buttons.tomsk_obl_1()}
                     },
-                    'teguld': {
+                    'teguldetskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239787', 'file': Path('files_gr') / 'to' / 'teguldet.txt', 'keyboard': await buttons.tomsk_obl_1()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'teguldet.txt', 'keyboard': await buttons.tomsk_obl_1()}
                     },
-                    'chain': {
+                    'chainskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239771', 'file': Path('files_gr') / 'to' / 'chainskij.txt', 'keyboard': await buttons.tomsk_obl_1()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'chainskij.txt', 'keyboard': await buttons.tomsk_obl_1()}
                     },
-                    'pervomaiskoye': {
+                    'pervomayskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239782', 'file': Path('files_gr') / 'perv' / 'pervomajskoje.txt', 'keyboard': await buttons.pervom_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'perv' / 'pervomajskoje.txt', 'keyboard': await buttons.pervom_rayon()}
                     },
-                    'serg': {
+                    's-sergeevo': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'perv' / 'sergeevo.txt', 'keyboard': await buttons.pervom_rayon()}
                     },
-                    'oreh': {
+                    'p-orehovo': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'perv' / 'orehovo.txt', 'keyboard': await buttons.pervom_rayon()}
                     },
-                    'ulu': {
+                    'p-ulu-yul': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'perv' / 'ulu-iul.txt', 'keyboard': await buttons.pervom_rayon()}
                     },
-                    'komsom': {
+                    's-komsomolsk': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'perv' / 'komsomolsk.txt', 'keyboard': await buttons.pervom_rayon()}
                     },
-                    'voronovo': {
+                    's-voronovo': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'koj' / 'voronovo.txt', 'keyboard': await buttons.kojev_rayon()}
                     },
-                    'kojevn': {
+                    'kozhevnikovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239774', 'file': Path('files_gr') / 'koj' / 'kozhevnikovo.txt', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'koj' / 'kozhevnikovo.txt', 'keyboard': await buttons.kojev_rayon()}
                     },
-                    'malin': {
+                    's-malinovka-kozhevnikovskiy': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'koj' / 'malinovka_kozh.txt', 'keyboard': await buttons.kojev_rayon()}
                     },
-                    'novopokrovka': {
+                    's-novopokrovka': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'koj' / 'novopokrovka.txt', 'keyboard': await buttons.kojev_rayon()}
                     },
-                    'pesochno': {
+                    's-pesochnodubrovka': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'koj' / 'pesok.txt', 'keyboard': await buttons.kojev_rayon()}
                     },
-                    'old_yuvala': {
+                    's-staraya-yuvala': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'koj' / 'yuvala.txt', 'keyboard': await buttons.kojev_rayon()}
                     },
-                    'urtam': {
+                    's-urtam': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'koj' / 'urtam.txt', 'keyboard': await buttons.kojev_rayon()}
                     },
-                    'chilino': {
+                    's-chilino': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'koj' / 'chilino.txt', 'keyboard': await buttons.kojev_rayon()}
                     },
-                    'volodino': {
+                    's-volodino': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'kriv' / 'volodino.txt', 'keyboard': await buttons.krivosh_rayon()}
                     },
-                    'red_yar': {
+                    's-krasnyy-yar': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'kriv' / 'red.txt', 'keyboard': await buttons.krivosh_rayon()}
                     },
-                    'krivosheino': {
+                    'krivosheinskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239776', 'file': Path('files_gr') / 'kriv' / 'krivosheino.txt', 'keyboard': await buttons.krivosh_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'kriv' / 'krivosheino.txt', 'keyboard': await buttons.krivosh_rayon()}
                     },
-                    'kolpashevo': {
+                    'kolpashevskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239775', 'file': Path('files_gr') / 'kolp' / 'kolpashevo.txt', 'keyboard': await buttons.kolp_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'kolp' / 'kolpashevo.txt', 'keyboard': await buttons.kolp_rayon()}
                     },
-                    'bolsh_sar': {
+                    'p-bolshaya-sarovka': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'kolp' / 'sarovka.txt', 'keyboard': await buttons.kolp_rayon()}
                     },
-                    'novoselovo': {
+                    's-novoselovo': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'kolp' / 'novoselovo.txt', 'keyboard': await buttons.kolp_rayon()}
                     },
-                    'chazhemto': {
+                    's-chazhemto': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'kolp' / 'chajemto.txt', 'keyboard': await buttons.kolp_rayon()}
                     },
-                    'mogochino': {
+                    's-mogochino': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'molch' / 'mogochino.txt', 'keyboard': await buttons.molch_rayon()}
                     },
-                    'molchanovo': {
+                    'molchanovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239779', 'file': Path('files_gr') / 'molch' / 'molchanovo.txt', 'keyboard': await buttons.molch_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'molch' / 'molchanovo.txt', 'keyboard': await buttons.molch_rayon()}
                     },
-                    'narga': {
+                    's-narga': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'molch' / 'narga.txt', 'keyboard': await buttons.molch_rayon()}
                     },
-                    'tungusovo': {
+                    's-tungusovo': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'molch' / 'tungusovo.txt', 'keyboard': await buttons.molch_rayon()}
                     },
-                    'anast': {
+                    's-anastasevka': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'shegar' / 'anast.txt', 'keyboard': await buttons.shegar_rayon()}
                     },
-                    'butkat': {
+                    's-batkat': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'shegar' / 'batkat.txt', 'keyboard': await buttons.shegar_rayon()}
                     },
-                    'meln': {
+                    'shegarskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239784', 'file': Path('files_gr') / 'shegar' / 'shegarskij.txt', 'keyboard': await buttons.shegar_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'shegar' / 'shegarskij.txt', 'keyboard': await buttons.shegar_rayon()}
                     },
-                    'monastery': {
+                    's-monastyrka': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'shegar' / 'monas.txt', 'keyboard': await buttons.shegar_rayon()}
                     },
-                    'victory': {
+                    'p-pobeda': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'shegar' / 'pobeda.txt', 'keyboard': await buttons.shegar_rayon()}
                     },
-                    'trubachevo': {
+                    's-trubachevo': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'shegar' / 'trub.txt', 'keyboard': await buttons.shegar_rayon()}
                     },
-                    'voronino': {
+                    'd-voronino': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'voronino.txt', 'keyboard': await buttons.tomsk_rayon()}
                     },
-                    'kislovka': {
+                    'd-kislovka': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'kislovka.txt', 'keyboard': await buttons.tomsk_rayon()}
                     },
-                    'zonaln': {
+                    'p-zonalnaya': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'zonalnij.txt', 'keyboard': await buttons.tomsk_rayon()}
                     },
-                    'peaceful': {
+                    'p-mirnyy': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'mirnij.txt', 'keyboard': await buttons.tomsk_rayon()}
                     },
-                    'dawn': {
+                    'p-rassvet': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'rassvet.txt', 'keyboard': await buttons.tomsk_rayon()}
                     },
-                    'bogashevo': {
+                    's-bogashevo': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'bogashevo.txt', 'keyboard': await buttons.tomsk_rayon()}
                     },
-                    'vershinino': {
+                    's-vershinino': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'vershinino.txt', 'keyboard': await buttons.tomsk_rayon()}
                     },
-                    'zork': {
+                    's-zorkalcevo': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'zorkalcevo.txt', 'keyboard': await buttons.tomsk_rayon()}
                     },
-                    'itatka': {
+                    's-itatka': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'itatka.txt', 'keyboard': await buttons.tomsk_rayon()}
                     },
-                    'kaltay': {
+                    's-kaltay': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'kaltaj.txt', 'keyboard': await buttons.tomsk_rayon()}
                     },
-                    'kornilovo': {
+                    's-kornilovo': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'kornilovo.txt', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
-                    'robin': {
+                    's-malinovka': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'malinovka_chul.txt', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
-                    'mejen': {
+                    's-mezheninovka': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'mezheninovka.txt', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
-                    'novoroj': {
+                    's-novorozhdestvenskoe': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'novorozhdest.txt', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
-                    'rybalovo': {
+                    's-rybalovo': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'ribalovo.txt', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
-                    'moryak_zaton': {
+                    's-moryakovskiy': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'moryakovskij.txt', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
-                    'turuntayevo_selo': {
+                    's-turuntaevo': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'turuntaevo.txt', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
-                    'october': {
+                    's-oktyabrskoe': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'oktyabrskoe.txt', 'keyboard': await buttons.tomsk_rayon_1()}
-                    },
-                    'alex': {
-                        'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239769', 'file': Path('files_gr') / 'to' / 'aleksandrovskij.txt', 'keyboard': await buttons.tomsk_obl_1()}
-                    },
-                    'alex': {
-                        'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239769', 'file': Path('files_gr') / 'to' / 'aleksandrovskij.txt', 'keyboard': await buttons.tomsk_obl_1()}
-                    },
+                    }
                 }
 
                 # Пример вызова функции по ключу

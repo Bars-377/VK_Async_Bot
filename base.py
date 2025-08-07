@@ -397,6 +397,33 @@ class Database:
             self.connection.close()
             print("Соединение с базой данных закрыто.")
 
+import asyncpg
+
+class Database_PostgreSQL:
+    def __init__(self, host, user, password, database):
+        self.host = host
+        self.user = user
+        self.password = password
+        self.database = database
+        self.connection = None
+
+    async def connect(self):
+        self.connection = await asyncpg.connect(
+            host=self.host,
+            user=self.user,
+            password=self.password,
+            database=self.database
+        )
+
+    async def search(self, columns, table, condition, params=None, one=False):
+        query = f"SELECT {columns} FROM {table} WHERE {condition}"
+        if one:
+            return await self.connection.fetchrow(query, *params) if params else await self.connection.fetchrow(query)
+        return await self.connection.fetch(query, *params) if params else await self.connection.fetch(query)
+
+    async def close(self):
+        await self.connection.close()
+
 class base:
     def __init__(self, user_id = None, filial = None, fio = None, tel = None, usluga = None, time = None, date = None, fields = None, \
         field_1 = None, field_2 = None, field_3 = None, field_4 = None, field_5 = None, field_6 = None, field_7 = None):
@@ -1859,6 +1886,34 @@ class base:
 
             #         await cursor.execute("COMMIT;")
             return
+        except Exception as e:
+            # Вывод подробной информации об ошибке
+            print(f"Поймано исключение: {type(e).__name__}")
+            print(f"Сообщение об ошибке: {str(e)}")
+            import traceback
+            print("Трассировка стека (stack trace):")
+            traceback.print_exc()
+
+    async def search_cpgu_order(self, order_number):
+        try:
+
+            SSR_AIS = ('10.200.50.13', "toma_reader", '49<tcBifCrjPz,', "cpgu")
+
+            db = Database_PostgreSQL(*SSR_AIS)
+            await db.connect()
+
+            result = await db.search(
+                'DATE(process_date) AS process_date',
+                'public.cpgu_order',
+                'order_number = $1',
+                params=[str(order_number)],
+                one=True
+            )
+
+            await db.close()
+
+            return result['process_date'] if result else None
+
         except Exception as e:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
