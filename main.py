@@ -848,6 +848,9 @@ def process_1():
         def get_file_extension_from_url(url: str) -> str:
             return Path(url).suffix.lstrip(".") or "jpg"
 
+        if 'photo' in url:
+            return url.split('//')[-1]
+
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
                 if resp.status == 200:
