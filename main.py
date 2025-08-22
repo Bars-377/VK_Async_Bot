@@ -1883,6 +1883,48 @@ def process_1():
         # Запускаем новую задачу сброса сессии
         user_reset_tasks[user_id] = asyncio.create_task(reset_session(user_id))
 
+        async def phone_select_two(message, user_id, phone):
+
+            ctx.set(f'{user_id}: tel_cache', phone)
+            ctx.set(f'{user_id}: fio_cache', '%')
+            answer = await base.information_about_coupons(ctx.get(f'{user_id}: tel_cache'), ctx.get(f'{user_id}: fio_cache'))
+            if answer['code'] == 'no':
+                # keyboard = await buttons.menu_menu()
+                # return await message.answer(loaded_data['38'], keyboard=keyboard)
+                
+                keyboard = await buttons.yes_no()
+                formatted_message = loaded_data['51'].format(phone=ctx.get(f'{user_id}: phone'))
+                await message.answer(f'По введённому вами номеру телефона {phone} талоны не найдены.')
+                return await message.answer(formatted_message, keyboard=keyboard)
+            if answer['code'] == 'error':
+                # keyboard = await buttons.menu_menu()
+                # return await message.answer(loaded_data['34'], keyboard=keyboard)
+
+                keyboard = await buttons.yes_no()
+                formatted_message = loaded_data['51'].format(phone=ctx.get(f'{user_id}: phone'))
+                await message.answer(loaded_data['34'])
+                return await message.answer(formatted_message, keyboard=keyboard)
+
+            await bot.state_dispenser.set(message.peer_id, SuperStates.DEL_COUPONS)
+
+            ctx.set(f'{user_id}: talon_id_cache', answer['talon_id'])
+            ctx.set(f'{user_id}: esiaid_cache', answer['esiaid'])
+            ctx.set(f'{user_id}: service_id_cache', answer['service_id'])
+            ctx.set(f'{user_id}: code_cache', answer['code'])
+            ctx.set(f'{user_id}: department_cache', answer['department'])
+            ctx.set(f'{user_id}: date_cache', answer['dates'])
+            ctx.set(f'{user_id}: time_cache', answer['times'])
+
+            code = ctx.get(f'{user_id}: code_cache')
+
+            index = int(ctx.get(f'{user_id}: code_counter'))
+            if index == -1:
+                ctx.set(f'{user_id}: code_counter', 0)
+                index = int(ctx.get(f'{user_id}: code_counter'))
+
+            keyboard = await buttons.yes_no()
+            return await message.answer(f"{answer['service_name_time']}.\n\nХотите ли удалить талон {code[index]}", keyboard=keyboard)
+
         try:
             await debug_print('ВХОД В ФУНКЦИЮ filials', user_id)
 
@@ -2176,44 +2218,20 @@ def process_1():
                 keyboard = await buttons.consultation()
                 return await message.answer("Выберите услугу", keyboard=keyboard)
             elif payload_data == 'yes':
+                await base(user_id=user_id).base_count('cancel_record')
+
+                ani = await base(user_id = user_id).phone_select()
+                await phone_select_two(message, user_id, ani[1][0][0])
+
+            elif payload_data == 'no':
+                # keyboard = await buttons.menu_menu()
+                # return await message.answer(loaded_data['50'], keyboard=keyboard)
 
                 await base(user_id=user_id).base_count('cancel_record')
 
                 ani = await base(user_id = user_id).phone_select()
+                await phone_select_two(message, user_id, ani[2][0][0])
 
-                ctx.set(f'{user_id}: tel_cache', ani[1][0][0])
-                ctx.set(f'{user_id}: fio_cache', '%')
-                answer = await base.information_about_coupons(ctx.get(f'{user_id}: tel_cache'), ctx.get(f'{user_id}: fio_cache'))
-                if answer['code'] == 'no':
-                    keyboard = await buttons.menu_menu()
-                    return await message.answer(loaded_data['38'], keyboard=keyboard)
-                if answer['code'] == 'error':
-                    keyboard = await buttons.menu_menu()
-                    return await message.answer(loaded_data['34'], keyboard=keyboard)
-
-                await bot.state_dispenser.set(message.peer_id, SuperStates.DEL_COUPONS)
-
-                ctx.set(f'{user_id}: talon_id_cache', answer['talon_id'])
-                ctx.set(f'{user_id}: esiaid_cache', answer['esiaid'])
-                ctx.set(f'{user_id}: service_id_cache', answer['service_id'])
-                ctx.set(f'{user_id}: code_cache', answer['code'])
-                ctx.set(f'{user_id}: department_cache', answer['department'])
-                ctx.set(f'{user_id}: date_cache', answer['dates'])
-                ctx.set(f'{user_id}: time_cache', answer['times'])
-
-                code = ctx.get(f'{user_id}: code_cache')
-
-                index = int(ctx.get(f'{user_id}: code_counter'))
-                if index == -1:
-                    ctx.set(f'{user_id}: code_counter', 0)
-                    index = int(ctx.get(f'{user_id}: code_counter'))
-
-                keyboard = await buttons.yes_no()
-                return await message.answer(f"{answer['service_name_time']}.\n\nХотите ли удалить талон {code[index]}", keyboard=keyboard)
-
-            elif payload_data == 'no':
-                keyboard = await buttons.menu_menu()
-                return await message.answer(loaded_data['50'], keyboard=keyboard)
             elif payload_data == 'delete_coupons':
                 keyboard = await buttons.yes_no()
                 formatted_message = loaded_data['51'].format(phone=ctx.get(f'{user_id}: phone'))
