@@ -2202,11 +2202,48 @@ def process_1():
                 await bot.state_dispenser.set(message.peer_id, SuperStates.STATUS)
                 keyboard = await buttons.menu_menu()
                 return await message.answer(loaded_data['48'], keyboard=keyboard)
-            elif payload_data == 'information_coupons':
-                await base(user_id=user_id).base_count('inf')
-                await bot.state_dispenser.set(message.peer_id, SuperStates.INF_COUPONS)
+            elif payload_data == 'yes' and ctx.get(f'{user_id}: information_about_coupons') == 'yes':
+                ctx.set(f'{user_id}: information_about_coupons', 'None')
+
+                answer = await base.information_about_coupons(ctx.get(f"{user_id}: phone"), ctx.get(f'{user_id}: fio_cache'))
+
+                if answer['code'] == 'no':
+                    keyboard = await buttons.menu_menu()
+                    return await message.answer(loaded_data['33'], keyboard=keyboard)
+                if answer['code'] == 'error':
+                    keyboard = await buttons.menu_menu()
+                    return await message.answer(loaded_data['34'], keyboard=keyboard)
                 keyboard = await buttons.menu_menu()
-                return await message.answer(loaded_data['49'], keyboard=keyboard)
+                return await message.answer(f"{answer['service_name_time']}", keyboard=keyboard)
+
+            elif payload_data == 'no' and ctx.get(f'{user_id}: information_about_coupons') == 'yes':
+                ctx.set(f'{user_id}: information_about_coupons', 'None')
+
+                answer = await base.information_about_coupons(ctx.get(f"{user_id}: phone_cache"), ctx.get(f'{user_id}: fio_cache'))
+
+                if answer['code'] == 'no':
+                    keyboard = await buttons.menu_menu()
+                    return await message.answer(loaded_data['33'], keyboard=keyboard)
+                if answer['code'] == 'error':
+                    keyboard = await buttons.menu_menu()
+                    return await message.answer(loaded_data['34'], keyboard=keyboard)
+                keyboard = await buttons.menu_menu()
+                return await message.answer(f"{answer['service_name_time']}", keyboard=keyboard)
+
+            elif payload_data == 'information_coupons':
+                ctx.set(f'{user_id}: information_about_coupons', 'yes')
+
+                answer, result, result_1 = await base(user_id = user_id).phone_select()
+                ctx.set(f"{user_id}: phone", result[0][0])
+                ctx.set(f"{user_id}: phone_cache", result_1[0][0])
+
+                await base(user_id=user_id).base_count('inf')
+
+                """Удалить если не пригодится целую функцию в SuperStates.INF_COUPONS"""
+                # await bot.state_dispenser.set(message.peer_id, SuperStates.INF_COUPONS)
+
+                keyboard = await buttons.yes_no()
+                return await message.answer(f'Для уточнение информации талонов использовать номер телефона {ctx.get(f'{user_id}: phone')}?', keyboard=keyboard)
             elif payload_data == 'information_mfc':
                 await base(user_id=user_id).base_count('cons')
                 await bot.state_dispenser.set(message.peer_id, SuperStates.INF_MFC)
