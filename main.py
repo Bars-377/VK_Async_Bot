@@ -873,9 +873,6 @@ def process_1():
             return await message.answer(f"{await read_file(file)}", keyboard=keyboard, attachment=ph)
         elif file and not photo:
             return await message.answer(f"{await read_file(file)}", keyboard=keyboard)
-        elif photo and not file:
-            ph = await upload_photo_from_url(f"{url_schedule}/{photo}", message)
-            return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
         elif isinstance(photo, tuple):
             for i in range(len(photo)-1):
                 ph = await upload_photo_from_url(f"{url_schedule}/{photo[i]}", message)
@@ -885,6 +882,9 @@ def process_1():
                 return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
             else:
                 return await message.answer(f"{await read_file(file)}", keyboard=keyboard, attachment=ph)
+        elif photo and not file:
+            ph = await upload_photo_from_url(f"{url_schedule}/{photo}", message)
+            return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
         else:
             return await message.answer("Выберите раздел", keyboard=keyboard)
 
