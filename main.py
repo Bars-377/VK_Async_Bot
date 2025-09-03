@@ -148,8 +148,6 @@ def process_1():
             ctx.__dict__['storage'].pop(key, None)
             # pass
 
-        # # Проверка текущего состояния storage
-        # print('Текущее состояние storage:', ctx.__dict__['storage'])
         await debug_print('ВЫХОД ИЗ ФУНКЦИИ reset_ctx', user_id)
         return
 
@@ -195,22 +193,8 @@ def process_1():
             logger.info(f"Использование памяти: {mem_usage} МБ")
             logger.info(f"Перед gc.collect(): {gc.get_count()}")
 
-            # gc.collect()
-
-            # # Состояние после сборки
-            # print(f"После gc.collect(): {gc.get_count()}")
-
-            # process = psutil.Process(os.getpid())
-            # mem_usage = process.memory_info().rss / (1024 * 1024)
-            # logger.info(f"Использование памяти 2: {mem_usage} МБ")
-
     async def notification_delete_coupon(user_id, message, result):
         await debug_print('ВХОД В ФУНКЦИЮ notification_delete_coupon', user_id)
-        # result = await base(user_id = user_id).select_vkontakte_reg()
-
-        # if not result == [] and result != ():
-
-        print('FSDAFDSFSSFDFDSFSDFFDFDS')
 
         talon = result[1]
         time_ = result[2]
@@ -228,10 +212,7 @@ def process_1():
         await debug_print('ВЫХОД ИЗ ФУНКЦИИ notification_delete_coupon', user_id)
         formatted_message = loaded_data['2'].format(talon=talon, department=department, service=service, date=date, time_=time_)
         return await message.answer(formatted_message, keyboard=keyboard)
-        # await debug_print('ВЫХОД ИЗ ФУНКЦИИ notification_delete_coupon', user_id)
 
-    # while True:
-        # try:
     async def user_verification(user_id, message, users_info):
         result = await base(user_id = user_id).select_vkontakte_reg()
         if result:
@@ -384,7 +365,6 @@ def process_1():
                     return await number_review()
 
                 pattern_number_statement = r'\d{2}/\d{4}/\d{1,10}'
-                # pattern_date = r'\d{4}-\d{2}-\d{2}'
 
                 if ctx.get(f'{user_id}: number_statement') == 'None' and re.search(pattern_number_statement, message.text):
 
@@ -409,14 +389,6 @@ def process_1():
 
                     keyboard = await buttons.reception()
                     return await message.answer(loaded_data['12'], keyboard=keyboard)
-
-                    # keyboard = await buttons.menu_menu()
-                    # return await message.answer(loaded_data['11'], keyboard=keyboard)
-
-                # elif ctx.get(f'{user_id}: number_date') == 'None' and re.search(pattern_date, message.text):
-                #     ctx.set(f"{user_id}: number_date", re.search(pattern_date, message.text).group())
-                #     keyboard = await buttons.reception()
-                #     return await message.answer(loaded_data['12'], keyboard=keyboard)
 
                 else:
                     keyboard = await buttons.menu_menu()
@@ -729,8 +701,7 @@ def process_1():
 
                 await bot.state_dispenser.set(message.peer_id, SuperStates.FILIALS)
                 await buttons.menu(user_id, config["VKONTAKTE"]["token"])
-                # Очистка всех переменных
-                # await reset_ctx(user_id)
+
                 await message.answer("{}".format(users_info[0].first_name) + ', Вы в главном меню', attachment=photo)
 
             else:
@@ -814,8 +785,7 @@ def process_1():
 
                     await bot.state_dispenser.set(message.peer_id, SuperStates.FILIALS)
                     await buttons.menu(user_id, config["VKONTAKTE"]["token"])
-                    # Очистка всех переменных
-                    # await reset_ctx(user_id)
+
                     return await message.answer("{}".format(users_info[0].first_name) + ', Вы в главном меню', attachment=photo)
                 else:
                     await bot.state_dispenser.set(message.peer_id, SuperStates.PHONE_INPUT)
@@ -1725,14 +1695,6 @@ def process_1():
                     date = list(ctx.get(f'{user_id}: date_cache'))
                     time = list(ctx.get(f'{user_id}: time_cache'))
 
-                    # print(talon_id)
-                    # print(esiaid)
-                    # print(service_id)
-                    # print(code)
-                    # print(department)
-                    # print(date)
-                    # print(time)
-
                     index = int(ctx.get(f'{user_id}: code_counter'))
 
                     code_cache = code[index]
@@ -1823,47 +1785,25 @@ def process_1():
     async def del_coupons(user_id, payload_data, message: Message):
         ctx.set(f'{user_id}: yes_no_cache', 'yes')
 
-        # print(payload_data)
-
         ctx.set(f'{user_id}: talon_id_cache', [payload_data.split('_')[2]])
-
-        # print('talon_id_cache', list(ctx.get(f'{user_id}: talon_id_cache')))
 
         ctx.set(f'{user_id}: esiaid_cache', [''])
 
-        # print('esiaid_cache', list(ctx.get(f'{user_id}: esiaid_cache')))
-
         ctx.set(f'{user_id}: service_id_cache', [payload_data.split('_')[9]])
-
-        # print('service_id_cache', list(ctx.get(f'{user_id}: service_id_cache')))
 
         ctx.set(f'{user_id}: code_cache', [payload_data.split('_')[3]])
 
-        # print('code_cache', list(ctx.get(f'{user_id}: code_cache')))
-
         ctx.set(f'{user_id}: department_cache', [payload_data.split('_')[4]])
-
-        # print('department_cache', list(ctx.get(f'{user_id}: department_cache')))
 
         ctx.set(f'{user_id}: date_cache', [payload_data.split('_')[5]])
 
-        # print('date_cache', list(ctx.get(f'{user_id}: date_cache')))
-
         ctx.set(f'{user_id}: code_counter', '0')
-
-        # print('code_counter', int(ctx.get(f'{user_id}: code_counter')))
 
         ctx.set(f'{user_id}: tel_cache', payload_data.split('_')[6])
 
-        # print('tel_cache', ctx.get(f'{user_id}: tel_cache'))
-
         ctx.set(f'{user_id}: fio', payload_data.split('_')[7])
 
-        # print('fio', ctx.get(f'{user_id}: fio'))
-
         ctx.set(f'{user_id}: time_cache', [payload_data.split('_')[8]])
-
-        # print('time_cache', list(ctx.get(f'{user_id}: time_cache')))
 
         await bot.state_dispenser.set(message.peer_id, SuperStates.DEL_COUPONS)
         keyboard = await buttons.yes_no()
@@ -1889,21 +1829,13 @@ def process_1():
             ctx.set(f'{user_id}: fio_cache', '%')
             answer = await base.information_about_coupons(ctx.get(f'{user_id}: tel_cache'), ctx.get(f'{user_id}: fio_cache'))
             if answer['code'] == 'no':
-                # keyboard = await buttons.menu_menu()
-                # return await message.answer(loaded_data['38'], keyboard=keyboard)
-                
-                keyboard = await buttons.yes_no()
-                formatted_message = loaded_data['51'].format(phone=ctx.get(f'{user_id}: phone'))
-                await message.answer(f'По введённому вами номеру телефона {phone} талоны не найдены.')
-                return await message.answer(formatted_message, keyboard=keyboard)
-            if answer['code'] == 'error':
-                # keyboard = await buttons.menu_menu()
-                # return await message.answer(loaded_data['34'], keyboard=keyboard)
 
-                keyboard = await buttons.yes_no()
-                formatted_message = loaded_data['51'].format(phone=ctx.get(f'{user_id}: phone'))
-                await message.answer(loaded_data['34'])
-                return await message.answer(formatted_message, keyboard=keyboard)
+                keyboard = await buttons.menu_menu()
+                return await message.answer(f'Талоны с номером телефона {ctx.get(f'{user_id}: phone')} не найдены.', keyboard=keyboard)
+            if answer['code'] == 'error':
+
+                keyboard = await buttons.menu_menu()
+                return await message.answer(f'Произошла ошибка поиска талонов. Попробуйте ещё раз.', keyboard=keyboard)
 
             await bot.state_dispenser.set(message.peer_id, SuperStates.DEL_COUPONS)
 
@@ -1929,29 +1861,6 @@ def process_1():
             await debug_print('ВХОД В ФУНКЦИЮ filials', user_id)
 
             users_info = await bot.api.users.get(user_ids=[user_id])
-
-            """Обнуление переменных пользователя"""
-            # ctx.set(f'{user_id}: field_1', 'None')
-            # ctx.set(f'{user_id}: field_2', 'None')
-            # ctx.set(f'{user_id}: field_3', 'None')
-            # ctx.set(f'{user_id}: field_4', 'None')
-            # ctx.set(f'{user_id}: field_5', 'None')
-            # ctx.set(f'{user_id}: field_6', 'None')
-            # ctx.set(f'{user_id}: field_7', 'None')
-            # ctx.set(f'{user_id}: date', 'None')
-            # ctx.set(f'{user_id}: time', 'None')
-            # ctx.set(f'{user_id}: tel_cache', 'None')
-            # ctx.set(f'{user_id}: fio_cache', 'None')
-            # ctx.set(f'{user_id}: yes_no_cache', 'None')
-            # ctx.set(f'{user_id}: code_counter', 0)
-            # ctx.set(f'{user_id}: times', 'None')
-
-            # ctx.set(f'{user_id}: application_service', 'None')
-            # ctx.set(f'{user_id}: contact_application', 'None')
-            # ctx.set(f'{user_id}: fio_application', 'None')
-            # ctx.set(f'{user_id}: category_application', 'None')
-
-            # ctx.set(f'{user_id}: application_location', 'None')
 
             ctx.set(f'{user_id}: code_counter', 0)
             fields = [
@@ -2071,9 +1980,6 @@ def process_1():
             if payload_data == 'filials' or payload_data == 'back_1' or payload_data == 'back':
 
                 answer = await base(user_id = user_id).phone_select()
-
-                # if answer[1][0][0] in ('89962061399', '89016106001'):
-                #     return await user_verification(user_id, message, users_info)
 
                 agreement_answer = await base(user_id = user_id).agreement_select()
 
@@ -2202,48 +2108,23 @@ def process_1():
                 await bot.state_dispenser.set(message.peer_id, SuperStates.STATUS)
                 keyboard = await buttons.menu_menu()
                 return await message.answer(loaded_data['48'], keyboard=keyboard)
-            elif payload_data == 'yes' and ctx.get(f'{user_id}: information_about_coupons') == 'yes':
+            
+            elif payload_data == 'information_coupons':
+
                 ctx.set(f'{user_id}: information_about_coupons', 'None')
 
                 answer = await base.information_about_coupons(ctx.get(f"{user_id}: phone"), ctx.get(f'{user_id}: fio_cache'))
 
                 if answer['code'] == 'no':
                     keyboard = await buttons.menu_menu()
-                    return await message.answer(loaded_data['33'], keyboard=keyboard)
+                    return await message.answer(f'Талоны с номером телефона {ctx.get(f'{user_id}: phone')} не найдены.', keyboard=keyboard)
                 if answer['code'] == 'error':
                     keyboard = await buttons.menu_menu()
-                    return await message.answer(loaded_data['34'], keyboard=keyboard)
+                    return await message.answer(f'Произошла ошибка поиска талонов. Попробуйте ещё раз.', keyboard=keyboard)
                 keyboard = await buttons.menu_menu()
+                await message.answer(f'Талоны с номером телефона {ctx.get(f'{user_id}: phone')}:')
                 return await message.answer(f"{answer['service_name_time']}", keyboard=keyboard)
 
-            elif payload_data == 'no' and ctx.get(f'{user_id}: information_about_coupons') == 'yes':
-                ctx.set(f'{user_id}: information_about_coupons', 'None')
-
-                answer = await base.information_about_coupons(ctx.get(f"{user_id}: phone_cache"), ctx.get(f'{user_id}: fio_cache'))
-
-                if answer['code'] == 'no':
-                    keyboard = await buttons.menu_menu()
-                    return await message.answer(loaded_data['33'], keyboard=keyboard)
-                if answer['code'] == 'error':
-                    keyboard = await buttons.menu_menu()
-                    return await message.answer(loaded_data['34'], keyboard=keyboard)
-                keyboard = await buttons.menu_menu()
-                return await message.answer(f"{answer['service_name_time']}", keyboard=keyboard)
-
-            elif payload_data == 'information_coupons':
-                ctx.set(f'{user_id}: information_about_coupons', 'yes')
-
-                answer, result, result_1 = await base(user_id = user_id).phone_select()
-                ctx.set(f"{user_id}: phone", result[0][0])
-                ctx.set(f"{user_id}: phone_cache", result_1[0][0])
-
-                await base(user_id=user_id).base_count('inf')
-
-                """Удалить если не пригодится целую функцию в SuperStates.INF_COUPONS"""
-                # await bot.state_dispenser.set(message.peer_id, SuperStates.INF_COUPONS)
-
-                keyboard = await buttons.yes_no()
-                return await message.answer(f'Для уточнение информации талонов использовать номер телефона {ctx.get(f'{user_id}: phone')}?', keyboard=keyboard)
             elif payload_data == 'information_mfc':
                 await base(user_id=user_id).base_count('cons')
                 await bot.state_dispenser.set(message.peer_id, SuperStates.INF_MFC)
@@ -2254,40 +2135,16 @@ def process_1():
                 await bot.state_dispenser.set(message.peer_id, SuperStates.CONSULTATION)
                 keyboard = await buttons.consultation()
                 return await message.answer("Выберите услугу", keyboard=keyboard)
-            elif payload_data == 'yes':
+
+            elif payload_data == 'delete_coupons':
                 await base(user_id=user_id).base_count('cancel_record')
 
+                await message.answer(f'Талоны с номером телефона {ctx.get(f'{user_id}: phone')}:')
                 ani = await base(user_id = user_id).phone_select()
                 await phone_select_two(message, user_id, ani[1][0][0])
 
-            elif payload_data == 'no':
-                # keyboard = await buttons.menu_menu()
-                # return await message.answer(loaded_data['50'], keyboard=keyboard)
-
-                await base(user_id=user_id).base_count('cancel_record')
-
-                ani = await base(user_id = user_id).phone_select()
-                await phone_select_two(message, user_id, ani[2][0][0])
-
-            elif payload_data == 'delete_coupons':
-                keyboard = await buttons.yes_no()
-                formatted_message = loaded_data['51'].format(phone=ctx.get(f'{user_id}: phone'))
-                return await message.answer(formatted_message, keyboard=keyboard)
             elif payload_data.startswith('delete_coupons_'):
-                # ctx.set(f'{user_id}: yes_no_cache', 'yes')
 
-                # ctx.set(f'{user_id}: talon_id_cache', [payload_data.split('_')[2]])
-                # ctx.set(f'{user_id}: esiaid_cache', [''])
-                # ctx.set(f'{user_id}: service_id_cache', [''])
-                # ctx.set(f'{user_id}: code_cache', [payload_data.split('_')[3]])
-                # ctx.set(f'{user_id}: department_cache', [payload_data.split('_')[4]])
-                # ctx.set(f'{user_id}: date_cache', [payload_data.split('_')[5]])
-                # ctx.set(f'{user_id}: code_counter', 0)
-                # ctx.set(f'{user_id}: tel_cache', payload_data.split('_')[6])
-                # ctx.set(f'{user_id}: fio', payload_data.split('_')[7])
-
-                # await bot.state_dispenser.set(message.peer_id, SuperStates.DEL_COUPONS)
-                # keyboard = await buttons.yes_no()
                 return await del_coupons(user_id, payload_data, message)
             else:
                 if message.payload == '{"command":"start"}':
@@ -2413,15 +2270,10 @@ def process_1():
         elif counter == 5:
             mes = loaded_data['56']
 
-        # # Путь к директории, куда сохранять файлы
-        # DOWNLOAD_PATH = "C:\\Users\\admin\\Desktop\\file"
-
         # Получаем текущую директорию проекта
-        # project_dir = os.path.dirname(os.path.abspath(__file__))
         project_dir = Path(__file__).resolve().parent
 
         # Строим путь к папке file внутри проекта
-        # DOWNLOAD_PATH = os.path.join(project_dir, 'file')
         DOWNLOAD_PATH = project_dir / 'file'
 
         await debug_print('ВЫХОД ИЗ ФУНКЦИИ ФУНКЦИЮ post_file', user_id)
@@ -2435,7 +2287,6 @@ def process_1():
                 document = attachment.doc
                 file_extension = document.ext
 
-                # file_name_format = str(document.title).split('.')[1]
                 file_name = f'{name}_{user_id}.{file_extension.lower()}'
 
                 # Проверка, что файл не имеет расширение .rar
@@ -2448,7 +2299,6 @@ def process_1():
                 photo = attachment.photo
                 file_extension = 'jpg'  # Обычно изображения сохраняются как JPG, но можно расширить логику
 
-                # file_name_format = str(photo.title).split('.')[1]
                 file_name = f'{name}_{user_id}.{file_extension}'
 
                 file_url = photo.sizes[-1].url  # Берем изображение с максимальным размером
@@ -2457,7 +2307,6 @@ def process_1():
                 return False, f'{mes}'
 
             # Полный путь, куда сохранять файл
-            # file_path = os.path.join(DOWNLOAD_PATH, file_name)
             file_path = DOWNLOAD_PATH / file_name
 
             # Загружаем файл с сервера ВКонтакте и сохраняем его
@@ -2469,7 +2318,6 @@ def process_1():
 
             print(f"Файл '{file_name}' сохранён.")
 
-            # return True, f"Файл '{file_name}' сохранён. {mes}"
             return True, f"{mes}"
         else:
             # Если вложений нет или они не являются документами
@@ -2477,18 +2325,13 @@ def process_1():
 
     async def write_to_file(user_id, text):
         await debug_print('ВХОД В ФУНКЦИЮ write_to_file', user_id)
-        # # Указываем директорию для сохранения файла
-        # folder_path = 'C:\\Users\\admin\\Desktop\\file'  # Укажите путь к папке
 
         # Получаем текущую директорию проекта
-        # project_dir = os.path.dirname(os.path.abspath(__file__))
         project_dir = Path(__file__).resolve().parent
 
         # Строим путь к папке file внутри проекта
-        # folder_path = os.path.join(project_dir, 'file')
         folder_path = project_dir / 'file'
 
-        # file_path = os.path.join(folder_path, f'info_{user_id}.txt')  # Путь к файлу
         file_path = folder_path / f'info_{user_id}.txt'  # Путь к файлу
 
         my_list = [item for item in text.split('_') if item]
@@ -2550,11 +2393,6 @@ def process_1():
                     return await message.answer(loaded_data['16'], keyboard=keyboard)
 
                 if payload_data == 'go_svo':
-                    # print(ctx.get(f'{user_id}: svo_'))
-                    # print(ctx.get(f'{user_id}: svo_text'))
-                    # print(ctx.get(f'{user_id}: svo_razd'))
-                    # print(ctx.get(f'{user_id}: svo_text_1'))
-
                     svo_razd = str(ctx.get(f'{user_id}: svo_razd')).split(', ')
                     svo_text_1 = str(ctx.get(f'{user_id}: svo_text_1')).split(', ')
 
@@ -2563,16 +2401,13 @@ def process_1():
                     for i in range(len(svo_razd)):
                         decoded_string += 'Услуга: ' + svo_razd[i] + '\n' + 'Данные: ' + svo_text_1[i] + '\n\n'
 
-                    # decoded_string = 'Услуги СВО\nКатегория: ' + str(ctx.get(f'{user_id}: svo_')) + '\n\nЛичные данные: ' + str(ctx.get(f'{user_id}: svo_text')) + '\n\nУслуги: ' + str(ctx.get(f'{user_id}: svo_razd')) + '\n\nДанные: ' + str(ctx.get(f'{user_id}: svo_text_1'))
                     decoded_string = decoded_string.replace("\\n", "\n")
                     decoded_string = decoded_string.strip().replace("\\n", "\n")
-                    # decoded_string = decoded_string.strip().replace(" ", "")
                     decoded_string = decoded_string.replace(" \n", "\n")
                     decoded_string = decoded_string.replace("\n ", "\n")
 
                     decoded_string = str(decoded_string).replace("_", " ") + '_' + 'Цена'
 
-                    # await base.base_svo('123', '321', 'привет')
                     await base.base_svo(user_id, ctx.get(f'{user_id}: department'), decoded_string)
 
                     await message.answer(loaded_data['14'])
@@ -2938,9 +2773,6 @@ def process_1():
             if payload_data == 'back' or payload_data == 'filials':
 
                 answer = await base(user_id = user_id).phone_select()
-
-                # if answer[1][0][0] in ('89962061399', '89016106001'):
-                #     return await user_verification(user_id, message, users_info)
 
                 agreement_answer = await base(user_id = user_id).agreement_select()
 
@@ -3523,13 +3355,6 @@ def process_1():
                 print('--------------------------------------------')
                 keyboard = await buttons.date_1(ctx.get(f'{user_id}: date'), ctx.get(f'{user_id}: time'), *SSR)
                 return await message.answer("Выберите свободную дату", keyboard=keyboard)
-            elif payload_data == 'yes':
-                await bot.state_dispenser.set(message.peer_id, SuperStates.PHONE)
-                keyboard = await buttons.fio_yes()
-                return await message.answer(loaded_data['78'], keyboard=keyboard)
-            elif payload_data == 'no':
-                await bot.state_dispenser.set(message.peer_id, SuperStates.PHONE_INPUT_NEW)
-                return await message.answer(loaded_data['61'])
 
             if not payload_data in times_list:
                 ctx.set(f'{user_id}: time', payload_data)
@@ -3564,9 +3389,11 @@ def process_1():
                 if payload == 'menu':
                     return await message.answer("На эту услугу нет свободного времени", keyboard=keyboard)
             else:
-                keyboard = await buttons.yes_no()
-                formatted_message = loaded_data['79'].format(phone=ctx.get(f'{user_id}: phone'))
-                return await message.answer(formatted_message, keyboard=keyboard)
+                await message.answer(f'Для записи используется номер телефона {ctx.get(f'{user_id}: phone')}:')
+                await bot.state_dispenser.set(message.peer_id, SuperStates.PHONE)
+                keyboard = await buttons.fio_yes()
+                return await message.answer(loaded_data['78'], keyboard=keyboard)
+
             return await message.answer("Выберите свободное время", keyboard=keyboard)
 
         except Exception as e:
@@ -3791,20 +3618,7 @@ def process_1():
                     raise TypeError
 
                 if payload_data.startswith('delete_coupons_'):
-                    # ctx.set(f'{user_id}: yes_no_cache', 'yes')
 
-                    # ctx.set(f'{user_id}: talon_id_cache', [payload_data.split('_')[2]])
-                    # ctx.set(f'{user_id}: esiaid_cache', [''])
-                    # ctx.set(f'{user_id}: service_id_cache', [''])
-                    # ctx.set(f'{user_id}: code_cache', [payload_data.split('_')[3]])
-                    # ctx.set(f'{user_id}: department_cache', [payload_data.split('_')[4]])
-                    # ctx.set(f'{user_id}: date_cache', [payload_data.split('_')[5]])
-                    # ctx.set(f'{user_id}: code_counter', 0)
-                    # ctx.set(f'{user_id}: tel_cache', payload_data.split('_')[6])
-                    # ctx.set(f'{user_id}: fio', payload_data.split('_')[7])
-
-                    # await bot.state_dispenser.set(message.peer_id, SuperStates.DEL_COUPONS)
-                    # keyboard = await buttons.yes_no()
                     return await del_coupons(user_id, payload_data, message)
                 elif payload_data == 'menu':
 
@@ -3839,8 +3653,7 @@ def process_1():
 
                 await bot.state_dispenser.set(message.peer_id, SuperStates.FILIALS)
                 await buttons.menu(user_id, config["VKONTAKTE"]["token"])
-                # Очистка всех переменных
-                # await reset_ctx(user_id)
+
                 await message.answer("{}".format(users_info[0].first_name) + ', Вы в главном меню', attachment=photo)
             else:
                 await bot.state_dispenser.set(message.peer_id, SuperStates.PHONE_INPUT)
@@ -3873,10 +3686,6 @@ def process_5():
             result.append(temp)
 
             return result
-
-        # keyboard = {
-        #     "inline_keyboard": keyboards_dates()
-        # }
 
         keyboard = {
             "keyboard": keyboards_dates(),
@@ -3980,16 +3789,6 @@ def process_2():
         keyboard = {
             "one_time": True,
             "buttons": [
-                # [
-                #     {
-                #         "action": {
-                #             "type": "text",
-                #             "label": "Удалить запись",
-                #             "payload": f"{{\"cmd\": \"delete_coupons_{uuid}_{talon}_{department}_{date}_{tel}_{fio}\"}}"
-                #         },
-                #         "color": "negative"
-                #     }
-                # ],
                 [
                     {
                         "action": {
