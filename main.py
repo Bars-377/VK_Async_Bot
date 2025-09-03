@@ -70,7 +70,14 @@ def process_1():
             return None
 
     ctx = CtxStorage()
+
+    from vkbottle.tools.auth import UserAuth
+    # Проверяем перед созданием бота
+    print("Перед Bot:", UserAuth.AUTH_URL)
+    UserAuth.AUTH_URL = "https://oauth.vk.ru/token"
     bot = Bot(token=config["VKONTAKTE"]["token"])
+    # Проверяем после создания бота
+    print("После Bot:", UserAuth.AUTH_URL)
 
     filials_id_docs = ('533',
                 '461', '641', '689', '431', '443', '479',
@@ -1837,6 +1844,8 @@ def process_1():
                 keyboard = await buttons.menu_menu()
                 return await message.answer(f'Произошла ошибка поиска талонов. Попробуйте ещё раз.', keyboard=keyboard)
 
+            await message.answer(f'Талоны с номером телефона {ctx.get(f'{user_id}: phone')}:')
+
             await bot.state_dispenser.set(message.peer_id, SuperStates.DEL_COUPONS)
 
             ctx.set(f'{user_id}: talon_id_cache', answer['talon_id'])
@@ -2139,7 +2148,6 @@ def process_1():
             elif payload_data == 'delete_coupons':
                 await base(user_id=user_id).base_count('cancel_record')
 
-                await message.answer(f'Талоны с номером телефона {ctx.get(f'{user_id}: phone')}:')
                 ani = await base(user_id = user_id).phone_select()
                 await phone_select_two(message, user_id, ani[1][0][0])
 
