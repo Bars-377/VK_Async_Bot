@@ -928,57 +928,57 @@ def process_1():
         except Exception as e:
             await errors(message, e)
 
-    @bot.labeler.message(state=SuperStates.INF_COUPONS)
-    async def information_coupons(message: Message):
-        user_id = message.from_id
+    # @bot.labeler.message(state=SuperStates.INF_COUPONS)
+    # async def information_coupons(message: Message):
+    #     user_id = message.from_id
 
-        # Обновляем время последнего взаимодействия
-        user_last_interaction[user_id] = message.date
+    #     # Обновляем время последнего взаимодействия
+    #     user_last_interaction[user_id] = message.date
 
-        # Если у пользователя уже есть задача сброса, отменяем её
-        if user_id in user_reset_tasks:
-            user_reset_tasks[user_id].cancel()
+    #     # Если у пользователя уже есть задача сброса, отменяем её
+    #     if user_id in user_reset_tasks:
+    #         user_reset_tasks[user_id].cancel()
 
-        # Запускаем новую задачу сброса сессии
-        user_reset_tasks[user_id] = asyncio.create_task(reset_session(user_id))
+    #     # Запускаем новую задачу сброса сессии
+    #     user_reset_tasks[user_id] = asyncio.create_task(reset_session(user_id))
 
-        try:
-            await debug_print('ВХОД В ФУНКЦИЮ information_coupons', user_id)
-            users_info = await bot.api.users.get(user_ids=[user_id])
+    #     try:
+    #         await debug_print('ВХОД В ФУНКЦИЮ information_coupons', user_id)
+    #         users_info = await bot.api.users.get(user_ids=[user_id])
 
-            try:
-                payload_data = await com(message)
-                if payload_data == None:
-                    raise TypeError
-                if payload_data == 'menu' or payload_data == 'back':
+    #         try:
+    #             payload_data = await com(message)
+    #             if payload_data == None:
+    #                 raise TypeError
+    #             if payload_data == 'menu' or payload_data == 'back':
 
-                    return await user_verification(user_id, message, users_info)
+    #                 return await user_verification(user_id, message, users_info)
 
-                elif payload_data == 'accept_entry':
-                    await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+    #             elif payload_data == 'accept_entry':
+    #                 await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
 
-                    return await user_verification(user_id, message, users_info)
+    #                 return await user_verification(user_id, message, users_info)
 
-            except TypeError:
-                pattern_telephone = r'^(8|\+7)[0-9]{10}$'
-                if re.match(pattern_telephone, message.text):
-                    answer = await base.information_about_coupons(message.text, ctx.get(f'{user_id}: fio_cache'))
+    #         except TypeError:
+    #             pattern_telephone = r'^(8|\+7)[0-9]{10}$'
+    #             if re.match(pattern_telephone, message.text):
+    #                 answer = await base.information_about_coupons(message.text, ctx.get(f'{user_id}: fio_cache'))
 
-                    if answer['code'] == 'no':
-                        keyboard = await buttons.menu_menu()
-                        return await message.answer(loaded_data['33'], keyboard=keyboard)
-                    if answer['code'] == 'error':
-                        keyboard = await buttons.menu_menu()
-                        return await message.answer(loaded_data['34'], keyboard=keyboard)
-                    keyboard = await buttons.menu_menu()
-                    return await message.answer(f"{answer['service_name_time']}", keyboard=keyboard)
-                else:
-                    keyboard = await buttons.menu_menu()
-                    return await message.answer(loaded_data['35'], keyboard=keyboard)
-            await debug_print('ВЫХОД ИЗ ФУНКЦИИ information_coupons', user_id)
-            return
-        except Exception as e:
-            await errors(message, e)
+    #                 if answer['code'] == 'no':
+    #                     keyboard = await buttons.menu_menu()
+    #                     return await message.answer(loaded_data['33'], keyboard=keyboard)
+    #                 if answer['code'] == 'error':
+    #                     keyboard = await buttons.menu_menu()
+    #                     return await message.answer(loaded_data['34'], keyboard=keyboard)
+    #                 keyboard = await buttons.menu_menu()
+    #                 return await message.answer(f"{answer['service_name_time']}", keyboard=keyboard)
+    #             else:
+    #                 keyboard = await buttons.menu_menu()
+    #                 return await message.answer(loaded_data['35'], keyboard=keyboard)
+    #         await debug_print('ВЫХОД ИЗ ФУНКЦИИ information_coupons', user_id)
+    #         return
+    #     except Exception as e:
+    #         await errors(message, e)
 
     async def read_file(file_path):
         project_dir = Path(__file__).resolve().parent
@@ -2117,8 +2117,10 @@ def process_1():
                 await bot.state_dispenser.set(message.peer_id, SuperStates.STATUS)
                 keyboard = await buttons.menu_menu()
                 return await message.answer(loaded_data['48'], keyboard=keyboard)
-            
+
             elif payload_data == 'information_coupons':
+
+                await base(user_id=user_id).base_count('inf')
 
                 ctx.set(f'{user_id}: information_about_coupons', 'None')
 
