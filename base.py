@@ -1222,6 +1222,8 @@ class base:
                 #                 time=f'{time_}',
                 #                 platform='VK')
 
+                print(response_res["data"])
+
                 try:
                     api = "http://172.18.11.104:8001/api/v1"
                     requests.post(
@@ -1229,7 +1231,7 @@ class base:
                         json={
                             "request_data": prms,
                             "response_data": response_res["data"],
-                            "origin": "DC",
+                            "origin": "VK",
                         },
                         timeout=3
                     )
@@ -2132,8 +2134,22 @@ class base:
                 'esiaid': esiaid
             }
 
+            prms_1 = {
+                "service_id": service_id,
+                "talon_id": talon_id,
+                "esiaid": esiaid,
+                "talon": talon,
+                "department": department,
+                "date": date,
+                "time": time,
+                "phone_dummy": phone_dummy,
+                "fio": fio
+            }
+
             response = requests.post(server + "/rest/booking/" + talon_id + "/delete/" + esiaid, params=prms, timeout=(2, 5)).json()
             res = response['success']
+
+            print(response)
 
             if res:
 
@@ -2154,8 +2170,8 @@ class base:
                         requests.delete(
                         api + '/bookings',
                         json={
-                            "response_data": response["data"],
-                            "origin": "DC",
+                            "response_data": prms_1,
+                            "origin": "VK",
                         },
                         timeout=3
                         )
