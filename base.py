@@ -4,6 +4,7 @@ import aiohttp
 import functools
 import datetime
 import ast
+import requests
 
 cache = {}
 
@@ -1212,14 +1213,28 @@ class base:
                                 fio=f'{fio}',
                                 service_id=f'{usluga}')
 
-                await db.insert('registration',
-                                fio=f'{fio}',
-                                tel=f'{self.tel}',
-                                talon=f'{res['number']}',
-                                department=f'{await get_key_by_value(filials, filial)}',
-                                date=f'{date_}',
-                                time=f'{time_}',
-                                platform='VK')
+                # await db.insert('registration',
+                #                 fio=f'{fio}',
+                #                 tel=f'{self.tel}',
+                #                 talon=f'{res['number']}',
+                #                 department=f'{await get_key_by_value(filials, filial)}',
+                #                 date=f'{date_}',
+                #                 time=f'{time_}',
+                #                 platform='VK')
+
+                try:
+                    api = "http://172.18.11.104:8001/api/v1"
+                    requests.post(
+                        api + "/bookings",
+                        json={
+                            "request_data": prms,
+                            "response_data": response_res["data"],
+                            "origin": "DC",
+                        },
+                        timeout=3
+                    )
+                except requests.RequestException:
+                    pass
 
                 # Получаем данные
                 await db.cursor.execute("SELECT restrictions FROM notification WHERE id_vk = %s LIMIT 1", (self.user_id,))
@@ -1975,7 +1990,6 @@ class base:
     async def information_about_coupons(*args):
 
         try:
-            import requests
 
             server = "https://equeue.mfc.tomsk.ru"
 
@@ -2110,7 +2124,6 @@ class base:
 
     async def delete_coupons(self, service_id, talon_id, esiaid, talon, department, date, time, phone_dummy, fio):
         try:
-            import requests
 
             server = "https://equeue.mfc.tomsk.ru"
 
@@ -2134,7 +2147,20 @@ class base:
                     db = Database(*SSR)
                     await db.connect()
 
-                    await db.insert('forms', fio=f'{fio}', tel=f'{phone_dummy}', talon=f'{talon}', department=f'{department}', date=f'{date}', time=f'{time}', platform='VK')
+                    # await db.insert('forms', fio=f'{fio}', tel=f'{phone_dummy}', talon=f'{talon}', department=f'{department}', date=f'{date}', time=f'{time}', platform='VK')
+
+                    try:
+                        api = "http://172.18.11.104:8001/api/v1"
+                        requests.delete(
+                        api + '/bookings',
+                        json={
+                            "response_data": response["data"],
+                            "origin": "DC",
+                        },
+                        timeout=3
+                        )
+                    except requests.RequestException:
+                        pass
 
                     await db.delete('vkontakte_reg', f'sender = "{self.user_id}" AND date ="{date}" AND talon = "{talon}" AND department = "{department}"')
 
