@@ -1714,7 +1714,7 @@ def process_1():
                     else:
                         fio = f"{last_name} {first_name}"
 
-                    res = await base(user_id = user_id).delete_coupons(service_id[index], talon_id[index], esiaid[index], code[index], department[index], date[index], time[index], ctx.get(f'{user_id}: tel_cache'), fio)
+                    res = await base(user_id = user_id).delete_coupons(service_id[index], talon_id[index], esiaid[index], code[index], department[index], date[index], time[index], ctx.get(f'{user_id}: tel_cache'), fio, ctx.get(f'{user_id}: talons_all'))
 
                     ctx.set(f'{user_id}: code_counter', index + 1)
 
@@ -1835,11 +1835,11 @@ def process_1():
             ctx.set(f'{user_id}: tel_cache', phone)
             ctx.set(f'{user_id}: fio_cache', '%')
             answer = await base.information_about_coupons(ctx.get(f'{user_id}: tel_cache'), ctx.get(f'{user_id}: fio_cache'))
-            if answer['code'] == 'no':
+            if answer['code_'] == 'no':
 
                 keyboard = await buttons.menu_menu()
                 return await message.answer(f'Талоны с номером телефона {ctx.get(f'{user_id}: phone')} не найдены.', keyboard=keyboard)
-            if answer['code'] == 'error':
+            if answer['code_'] == 'error':
 
                 keyboard = await buttons.menu_menu()
                 return await message.answer(f'Произошла ошибка поиска талонов. Попробуйте ещё раз.', keyboard=keyboard)
@@ -1855,6 +1855,8 @@ def process_1():
             ctx.set(f'{user_id}: department_cache', answer['department'])
             ctx.set(f'{user_id}: date_cache', answer['dates'])
             ctx.set(f'{user_id}: time_cache', answer['times'])
+
+            ctx.set(f'{user_id}: talons_all', answer['talons_all'])
 
             code = ctx.get(f'{user_id}: code_cache')
 
@@ -1906,10 +1908,10 @@ def process_1():
                         ctx.set(f'{user_id}: tel_cache', ani)
                         ctx.set(f'{user_id}: fio_cache', '%')
                         answer = await base.information_about_coupons(ctx.get(f'{user_id}: tel_cache'), ctx.get(f'{user_id}: fio_cache'))
-                        if answer['code'] == 'no':
+                        if answer['code_'] == 'no':
                             keyboard = await buttons.menu_menu()
                             return await message.answer(loaded_data['38'], keyboard=keyboard)
-                        if answer['code'] == 'error':
+                        if answer['code_'] == 'error':
                             keyboard = await buttons.menu_menu()
                             return await message.answer(loaded_data['34'], keyboard=keyboard)
 
@@ -1922,6 +1924,8 @@ def process_1():
                         ctx.set(f'{user_id}: department_cache', answer['department'])
                         ctx.set(f'{user_id}: date_cache', answer['dates'])
                         ctx.set(f'{user_id}: time_cache', answer['times'])
+
+                        ctx.set(f'{user_id}: talons_all', answer['talons_all'])
 
                         code = ctx.get(f'{user_id}: code_cache')
 
@@ -2126,10 +2130,10 @@ def process_1():
 
                 answer = await base.information_about_coupons(ctx.get(f"{user_id}: phone"), ctx.get(f'{user_id}: fio_cache'))
 
-                if answer['code'] == 'no':
+                if answer['code_'] == 'no':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(f'Талоны с номером телефона {ctx.get(f'{user_id}: phone')} не найдены.', keyboard=keyboard)
-                if answer['code'] == 'error':
+                if answer['code_'] == 'error':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(f'Произошла ошибка поиска талонов. Попробуйте ещё раз.', keyboard=keyboard)
                 keyboard = await buttons.menu_menu()

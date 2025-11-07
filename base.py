@@ -2022,7 +2022,7 @@ class base:
 
             if phone_dummy == '':
                 return {
-                    "code": 'no'
+                    "code_": 'no'
                 }
 
             prms = {
@@ -2096,7 +2096,7 @@ class base:
                     time_[i]  + ', номер талона: ' + talons['data'][i]['code'] + p
 
                 res = {
-                    "code": 'yes',
+                    "code_": 'yes',
                     'service_name_time': service_name_time,
                     'talon_id': talon_id,
                     'esiaid': esiaid,
@@ -2104,11 +2104,12 @@ class base:
                     'code': code,
                     'department': location_name,
                     'dates': dates,
-                    'times': times
+                    'times': times,
+                    'talons_all': talons['data']
                 }
             else:
                 res = {
-                    "code": 'no'
+                    "code_": 'no'
                 }
         except Exception as e:
             # Вывод подробной информации об ошибке
@@ -2119,12 +2120,12 @@ class base:
             traceback.print_exc()
 
             res = {
-                "code": "error"
+                "code_": "error"
             }
 
         return res
 
-    async def delete_coupons(self, service_id, talon_id, esiaid, talon, department, date, time, phone_dummy, fio):
+    async def delete_coupons(self, service_id, talon_id, esiaid, talon, department, date, time, phone_dummy, fio, talons_all):
         try:
 
             server = "https://equeue.mfc.tomsk.ru"
@@ -2134,22 +2135,28 @@ class base:
                 'esiaid': esiaid
             }
 
-            prms_1 = {
-                "service_id": service_id,
-                "talon_id": talon_id,
-                "esiaid": esiaid,
-                "talon": talon,
-                "department": department,
-                "date": date,
-                "time": time,
-                "phone_dummy": phone_dummy,
-                "fio": fio
-            }
+            for talon in talons_all:
+                if talon["id"] == talon_id:
+                    prms_1 = talon
+
+            # print(prms_1)
+
+            # prms_1 = {
+            #     "service_id": service_id,
+            #     "talon_id": talon_id,
+            #     "esiaid": esiaid,
+            #     "talon": talon,
+            #     "department": department,
+            #     "date": date,
+            #     "time": time,
+            #     "phone_dummy": phone_dummy,
+            #     "fio": fio
+            # }
 
             response = requests.post(server + "/rest/booking/" + talon_id + "/delete/" + esiaid, params=prms, timeout=(2, 5)).json()
             res = response['success']
 
-            print(response)
+            # print(response)
 
             if res:
 
