@@ -211,18 +211,18 @@ def process_mail():
     try:
         cursor = connection.cursor()
 
-        while True:
-            # global exit_event
-            update_query = "SELECT * FROM application;"
+        # while True:
+        # global exit_event
+        update_query = "SELECT * FROM application;"
+        cursor.execute(update_query)
+        data = cursor.fetchall()
+
+        for row in data:
+            treatment_p(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+            update_query = f"DELETE FROM application WHERE id = {row[0]};"
             cursor.execute(update_query)
-            data = cursor.fetchall()
 
-            for row in data:
-                treatment_p(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
-                update_query = f"DELETE FROM application WHERE id = {row[0]};"
-                cursor.execute(update_query)
-
-            connection.commit()  # Фиксация транзакции
+        connection.commit()  # Фиксация транзакции
 
     except Exception as e:
         # Вывод подробной информации об ошибке
@@ -792,6 +792,7 @@ def process_file():
             traceback.print_exc()
 
     send_files()
+    process_mail()
 
 # if __name__ == "__main__":
 

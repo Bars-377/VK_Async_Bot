@@ -4085,9 +4085,9 @@ def process_6():
     import calendars
     calendars.process_calendar()
 
-def process_7():
-    import mail
-    mail.process_mail()
+# def process_7():
+#     import mail
+#     mail.process_mail()
 
 def process_8():
     import mail
@@ -4465,8 +4465,8 @@ if __name__ == "__main__":
     # process3 = Process(target=process_3) # НЕ НУЖНО
     # process4 = Process(target=process_4) # НЕ НУЖНО
     # process5 = Process(target=process_5) # НЕ НУЖНО
-    # process6 = Process(target=process_6)
-    process7 = Process(target=process_7)
+    # process6 = Process(target=process_6) # НЕ НУЖНО
+    # process7 = Process(target=process_7) # НЕ НУЖНО
     process8 = Process(target=process_8)
     # process9 = Process(target=process_9) # НЕ НУЖНО
     # process10 = Process(target=process_10) # НЕ НУЖНО
@@ -4523,10 +4523,10 @@ if __name__ == "__main__":
             #     process6 = Process(target=process_6)
             #     process6.start()
             #     # process6.join()
-            elif not process7.is_alive():
-                process7 = Process(target=process_7)
-                process7.start()
-                # process7.join()
+            # elif not process7.is_alive():
+            #     process7 = Process(target=process_7)
+            #     process7.start()
+            #     # process7.join()
             elif not process8.is_alive():
                 process8 = Process(target=process_8)
                 process8.start()
@@ -4556,10 +4556,10 @@ if __name__ == "__main__":
             process1.join()  # Ждем завершения процесса
             print("Процесс 1 был завершен.")
 
-            # print("Завершение процесса 2...")
-            # process2.terminate()  # Принудительное завершение процесса
-            # process2.join()  # Ждем завершения процесса
-            # print("Процесс 2 был завершен.")
+            print("Завершение процесса 2...")
+            process2.terminate()  # Принудительное завершение процесса
+            process2.join()  # Ждем завершения процесса
+            print("Процесс 2 был завершен.")
 
             # print("Завершение процесса 3...")
             # process3.terminate()  # Принудительное завершение процесса
@@ -4581,10 +4581,10 @@ if __name__ == "__main__":
             # process6.join()  # Ждем завершения процесса
             # print("Процесс 6 был завершен.")
 
-            print("Завершение процесса 7...")
-            process7.terminate()  # Принудительное завершение процесса
-            process7.join()  # Ждем завершения процесса
-            print("Процесс 7 был завершен.")
+            # print("Завершение процесса 7...")
+            # process7.terminate()  # Принудительное завершение процесса
+            # process7.join()  # Ждем завершения процесса
+            # print("Процесс 7 был завершен.")
 
             print("Завершение процесса 8...")
             process8.terminate()  # Принудительное завершение процесса
@@ -4609,10 +4609,10 @@ if __name__ == "__main__":
             process1.join()  # Ждем завершения процесса
             print("Процесс 1 был завершен.")
 
-            # print("Завершение процесса 2...")
-            # process2.terminate()  # Принудительное завершение процесса
-            # process2.join()  # Ждем завершения процесса
-            # print("Процесс 2 был завершен.")
+            print("Завершение процесса 2...")
+            process2.terminate()  # Принудительное завершение процесса
+            process2.join()  # Ждем завершения процесса
+            print("Процесс 2 был завершен.")
 
             # print("Завершение процесса 3...")
             # process3.terminate()  # Принудительное завершение процесса
@@ -4634,10 +4634,10 @@ if __name__ == "__main__":
             # process6.join()  # Ждем завершения процесса
             # print("Процесс 6 был завершен.")
 
-            print("Завершение процесса 7...")
-            process7.terminate()  # Принудительное завершение процесса
-            process7.join()  # Ждем завершения процесса
-            print("Процесс 7 был завершен.")
+            # print("Завершение процесса 7...")
+            # process7.terminate()  # Принудительное завершение процесса
+            # process7.join()  # Ждем завершения процесса
+            # print("Процесс 7 был завершен.")
 
             print("Завершение процесса 8...")
             process8.terminate()  # Принудительное завершение процесса
