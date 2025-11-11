@@ -1242,22 +1242,33 @@ class base:
                 await db.cursor.execute("SELECT restrictions FROM notification WHERE id_vk = %s LIMIT 1", (self.user_id,))
                 result = await db.cursor.fetchone()
 
-                # Попытка безопасно прочитать список
-                if result and result[0]:
-                    try:
-                        parsed = ast.literal_eval(result[0])
-                        if isinstance(parsed, list):
-                            current_restrictions = parsed
-                        else:
-                            current_restrictions = []
-                    except Exception:
-                        current_restrictions = []
-                else:
+                # # Попытка безопасно прочитать список
+                # if result and result[0]:
+                #     try:
+                #         parsed = ast.literal_eval(result[0])
+                #         if isinstance(parsed, list):
+                #             current_restrictions = parsed
+                #         else:
+                #             current_restrictions = []
+                #     except Exception:
+                #         current_restrictions = []
+                # else:
+                #     current_restrictions = []
+
+                # Обработка пустого или некорректного JSON
+                if not (result and result[0]):
                     current_restrictions = []
+                else:
+                    try:
+                        current_restrictions = json.loads(result[0])
+                        if not isinstance(current_restrictions, list):
+                            raise ValueError
+                    except (json.JSONDecodeError, ValueError):
+                        current_restrictions = []
 
                 # Добавляем новую запись
-                current_restrictions.append({'service': usluga, 'date': date})
-                new_restrictions = str(current_restrictions)
+                current_restrictions.append({"service": usluga, "date": date})
+                new_restrictions = json.dumps(current_restrictions, ensure_ascii=False)
 
                 # Обновляем БД
                 await db.cursor.execute(
@@ -2193,18 +2204,29 @@ class base:
                     await db.cursor.execute("SELECT restrictions FROM notification WHERE id_vk = %s LIMIT 1", (self.user_id,))
                     result = await db.cursor.fetchone()
 
-                    # Попытка безопасно прочитать список
-                    if result and result[0]:
-                        try:
-                            parsed = ast.literal_eval(result[0])
-                            if isinstance(parsed, list):
-                                current_restrictions = parsed
-                            else:
-                                current_restrictions = []
-                        except Exception:
-                            current_restrictions = []
-                    else:
+                    # # Попытка безопасно прочитать список
+                    # if result and result[0]:
+                    #     try:
+                    #         parsed = ast.literal_eval(result[0])
+                    #         if isinstance(parsed, list):
+                    #             current_restrictions = parsed
+                    #         else:
+                    #             current_restrictions = []
+                    #     except Exception:
+                    #         current_restrictions = []
+                    # else:
+                    #     current_restrictions = []
+
+                    # Обработка пустого или некорректного JSON
+                    if not (result and result[0]):
                         current_restrictions = []
+                    else:
+                        try:
+                            current_restrictions = json.loads(result[0])
+                            if not isinstance(current_restrictions, list):
+                                raise ValueError
+                        except (json.JSONDecodeError, ValueError):
+                            current_restrictions = []
 
                     # Предположим, что usluga и date — значения, которые нужно удалить
                     current_restrictions = [
@@ -2213,7 +2235,7 @@ class base:
                     ]
 
                     # После удаления преобразуем обратно в строку, если нужно
-                    new_restrictions = str(current_restrictions)
+                    new_restrictions = json.dumps(current_restrictions, ensure_ascii=False)
 
                     # Обновляем БД
                     await db.cursor.execute(

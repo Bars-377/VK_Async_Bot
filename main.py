@@ -57,6 +57,8 @@ from vkbottle import Keyboard, KeyboardButtonColor, Text
 
 def process_1():
 
+    from datetime import datetime, timedelta
+
     async def com(message):
         try:
             # Предполагаем, что message.payload - это строка JSON
@@ -309,8 +311,7 @@ def process_1():
                 number_employee = ctx.get(f'{user_id}: number_employee')
                 number_review = ctx.get(f'{user_id}: number_review')
 
-                import datetime
-                date_now = str(datetime.datetime.now().date())
+                date_now = str(datetime.now().date())
 
                 questions = (number_statement, number_date, number_department, number_grade, number_waiting_time, number_time, number_employee, number_review, date_now)
 
@@ -3685,218 +3686,216 @@ import requests
 import random
 import time
 
-import datetime
+# def process_5():
+#     """Уведолмение о приёме в telegram"""
+#     def post_message(ani, talon, time, date, department, service):
 
-def process_5():
-    """Уведолмение о приёме в telegram"""
-    def post_message(ani, talon, time, date, department, service):
+#         message = f"У вас скоро приём {date} в {time}! Номер вашего талона: {talon}, филиал: {department}, услуга: {service}.\n\nНажмите /start для того, что бы подтвердить или удалить вашу запись."
 
-        message = f"У вас скоро приём {date} в {time}! Номер вашего талона: {talon}, филиал: {department}, услуга: {service}.\n\nНажмите /start для того, что бы подтвердить или удалить вашу запись."
+#         def keyboards_dates():
+#             result = []
+#             temp = []
 
-        def keyboards_dates():
-            result = []
-            temp = []
+#             temp.append({"text": f"/start", "callback_data": "/start"})
+#             result.append(temp)
 
-            temp.append({"text": f"/start", "callback_data": "/start"})
-            result.append(temp)
+#             return result
 
-            return result
+#         keyboard = {
+#             "keyboard": keyboards_dates(),
+#             "resize_keyboard": True
+#         }
 
-        keyboard = {
-            "keyboard": keyboards_dates(),
-            "resize_keyboard": True
-        }
+#         data = {
+#             "chat_id": ani,
+#             "text": message,
+#             "reply_markup": json.dumps(keyboard)
+#         }
 
-        data = {
-            "chat_id": ani,
-            "text": message,
-            "reply_markup": json.dumps(keyboard)
-        }
+#         requests.post(f"https://api.telegram.org/bot{config["TELEGRAM"]["token_one"]}/sendMessage", data=data)
+#         # """ОТКЛЮЧИЛ ОСНОВНОЙ ТБ"""
+#         requests.post(f"https://api.telegram.org/bot{config["TELEGRAM"]["token_two"]}/sendMessage", data=data)
 
-        requests.post(f"https://api.telegram.org/bot{config["TELEGRAM"]["token_one"]}/sendMessage", data=data)
-        # """ОТКЛЮЧИЛ ОСНОВНОЙ ТБ"""
-        requests.post(f"https://api.telegram.org/bot{config["TELEGRAM"]["token_two"]}/sendMessage", data=data)
+#     server = "https://equeue.mfc.tomsk.ru"
 
-    server = "https://equeue.mfc.tomsk.ru"
+#     while True:
+#         try:
 
-    while True:
-        try:
+#             now = datetime.datetime.now()
+#             date_now = now + datetime.timedelta(hours=24)
+#             date_formatted = date_now.strftime('%Y-%m-%d')
+#             time_formatted = date_now.strftime('%H:%M')
 
-            now = datetime.datetime.now()
-            date_now = now + datetime.timedelta(hours=24)
-            date_formatted = date_now.strftime('%Y-%m-%d')
-            time_formatted = date_now.strftime('%H:%M')
+#             if str(time_formatted) == '15:00':
 
-            if str(time_formatted) == '15:00':
+#                 with mysql.connector.connect(
+#                     host=host,
+#                     user=user,
+#                     password=password,
+#                     database=database,
+#                     connection_timeout=2
+#                 ) as mydb:
+#                     mycursor = mydb.cursor()
+#                     mycursor.execute(
+#                         f"SELECT * FROM telegram_reg;"
+#                     )
+#                     myresult = mycursor.fetchall()
 
-                with mysql.connector.connect(
-                    host=host,
-                    user=user,
-                    password=password,
-                    database=database,
-                    connection_timeout=2
-                ) as mydb:
-                    mycursor = mydb.cursor()
-                    mycursor.execute(
-                        f"SELECT * FROM telegram_reg;"
-                    )
-                    myresult = mycursor.fetchall()
+#                     for x in myresult:
+#                         service = x[3]
+#                         if service == str(date_formatted) and x[9] != 'yes':
+#                             if not x[6] == None:
+#                                 prms = {
+#                                     'uuid': x[6]
+#                                 }
 
-                    for x in myresult:
-                        service = x[3]
-                        if service == str(date_formatted) and x[9] != 'yes':
-                            if not x[6] == None:
-                                prms = {
-                                    'uuid': x[6]
-                                }
+#                                 talon = requests.get(server + "/rest/booking", params=prms, timeout=(5, 8)).json()
 
-                                talon = requests.get(server + "/rest/booking", params=prms, timeout=(5, 8)).json()
+#                                 if not talon['data'] == []:
+#                                     post_message(x[0], x[1], x[2], x[3], x[4], x[5])
+#                                     query = "UPDATE telegram_reg SET now = %s WHERE ani = %s AND date = %s;"
+#                                     mycursor.execute(query, ('yes', x[0], x[3]))
+#                                     mydb.commit()
+#                                 else:
+#                                     query = "DELETE FROM telegram_reg WHERE ani = %s AND date = %s AND talon = %s AND department = %s;"
+#                                     mycursor.execute(query, (x[0], x[3], x[1], x[4]))
+#                                     mydb.commit()
 
-                                if not talon['data'] == []:
-                                    post_message(x[0], x[1], x[2], x[3], x[4], x[5])
-                                    query = "UPDATE telegram_reg SET now = %s WHERE ani = %s AND date = %s;"
-                                    mycursor.execute(query, ('yes', x[0], x[3]))
-                                    mydb.commit()
-                                else:
-                                    query = "DELETE FROM telegram_reg WHERE ani = %s AND date = %s AND talon = %s AND department = %s;"
-                                    mycursor.execute(query, (x[0], x[3], x[1], x[4]))
-                                    mydb.commit()
+#                     mycursor.close()
+#                     mydb.close()
 
-                    mycursor.close()
-                    mydb.close()
+#             continue
 
-            continue
+#         except Exception as e:
+#             # Вывод подробной информации об ошибке
+#             print(f"Поймано исключение: {type(e).__name__}")
+#             print(f"Сообщение об ошибке: {str(e)}")
+#             import traceback
+#             print("Трассировка стека (stack trace):")
+#             traceback.print_exc()
 
-        except Exception as e:
-            # Вывод подробной информации об ошибке
-            print(f"Поймано исключение: {type(e).__name__}")
-            print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
-            print("Трассировка стека (stack trace):")
-            traceback.print_exc()
+# def process_2():
+#     """Уведолмение о приёме в VKONTAKTE"""
+#     def post_message(user_id, talon, time, date, department, service, uuid, tel, fio):
+#         # Данные для авторизации
+#         access_token = config["VKONTAKTE"]["token"]
+#         api_version = "5.199"
+#         message = f"У вас скоро приём {date} в {time}! Номер вашего талона {talon}, филиал: {department}, услуга: {service}"
 
-def process_2():
-    """Уведолмение о приёме в VKONTAKTE"""
-    def post_message(user_id, talon, time, date, department, service, uuid, tel, fio):
-        # Данные для авторизации
-        access_token = config["VKONTAKTE"]["token"]
-        api_version = "5.199"
-        message = f"У вас скоро приём {date} в {time}! Номер вашего талона {talon}, филиал: {department}, услуга: {service}"
+#         # Генерация случайного числа для random_id
+#         random_id = random.getrandbits(31)
 
-        # Генерация случайного числа для random_id
-        random_id = random.getrandbits(31)
+#         # URL для отправки сообщения
+#         url = f"https://api.vk.com/method/messages.send"
 
-        # URL для отправки сообщения
-        url = f"https://api.vk.com/method/messages.send"
+#         # Параметры запроса
+#         params = {
+#             "access_token": access_token,
+#             "v": api_version,
+#             "user_id": user_id,
+#             "message": message,
+#             "random_id": random_id
+#         }
 
-        # Параметры запроса
-        params = {
-            "access_token": access_token,
-            "v": api_version,
-            "user_id": user_id,
-            "message": message,
-            "random_id": random_id
-        }
+#         # Отправляем POST-запрос
+#         requests.post(url, params=params)
 
-        # Отправляем POST-запрос
-        requests.post(url, params=params)
+#         keyboard = {
+#             "one_time": True,
+#             "buttons": [
+#                 [
+#                     {
+#                         "action": {
+#                             "type": "text",
+#                             "label": "Продолжить",
+#                             "payload": "{\"cmd\": \"menu\"}"
+#                         },
+#                         "color": "positive"
+#                     }
+#                 ]
+#             ]
+#         }
 
-        keyboard = {
-            "one_time": True,
-            "buttons": [
-                [
-                    {
-                        "action": {
-                            "type": "text",
-                            "label": "Продолжить",
-                            "payload": "{\"cmd\": \"menu\"}"
-                        },
-                        "color": "positive"
-                    }
-                ]
-            ]
-        }
+#         import time
 
-        import time
+#         message = 'ㅤ'
 
-        message = 'ㅤ'
+#         # Функция для генерации "случайных" чисел без использования модуля random
+#         def custom_random():
+#             current_time = time.time()
+#             seed = int((current_time - int(current_time)) * 10**6)  # Используем миллионные доли секунды в качестве зерна для "случайности"
+#             next_number = (1103515245 * seed + 12345) % 2**31  # Простой линейный конгруэнтный генератор
+#             return next_number
 
-        # Функция для генерации "случайных" чисел без использования модуля random
-        def custom_random():
-            current_time = time.time()
-            seed = int((current_time - int(current_time)) * 10**6)  # Используем миллионные доли секунды в качестве зерна для "случайности"
-            next_number = (1103515245 * seed + 12345) % 2**31  # Простой линейный конгруэнтный генератор
-            return next_number
+#         # Отправка сообщения с клавиатурой
+#         payload = {
+#             'access_token': access_token,
+#             'peer_id': user_id,
+#             'message': message,
+#             'keyboard': json.dumps(keyboard),
+#             'random_id': custom_random(),
+#             'v': '5.199'  # Добавляем версию API
+#         }
 
-        # Отправка сообщения с клавиатурой
-        payload = {
-            'access_token': access_token,
-            'peer_id': user_id,
-            'message': message,
-            'keyboard': json.dumps(keyboard),
-            'random_id': custom_random(),
-            'v': '5.199'  # Добавляем версию API
-        }
+#         requests.post('https://api.vk.com/method/messages.send', params=payload)
 
-        requests.post('https://api.vk.com/method/messages.send', params=payload)
+#     server = "https://equeue.mfc.tomsk.ru"
 
-    server = "https://equeue.mfc.tomsk.ru"
+#     while True:
+#         try:
 
-    while True:
-        try:
+#             now = datetime.datetime.now()
+#             date_now = now + datetime.timedelta(hours=24)
+#             date_formatted = date_now.strftime('%Y-%m-%d')
+#             time_formatted = date_now.strftime('%H:%M')
 
-            now = datetime.datetime.now()
-            date_now = now + datetime.timedelta(hours=24)
-            date_formatted = date_now.strftime('%Y-%m-%d')
-            time_formatted = date_now.strftime('%H:%M')
+#             if str(time_formatted) == '15:00':
 
-            if str(time_formatted) == '15:00':
+#                 with mysql.connector.connect(
+#                     host=host,
+#                     user=user,
+#                     password=password,
+#                     database=database,
+#                     connection_timeout=2
+#                 ) as mydb:
+#                     mycursor = mydb.cursor()
+#                     mycursor.execute(
+#                         f"SELECT * FROM vkontakte_reg;"
+#                     )
+#                     myresult = mycursor.fetchall()
 
-                with mysql.connector.connect(
-                    host=host,
-                    user=user,
-                    password=password,
-                    database=database,
-                    connection_timeout=2
-                ) as mydb:
-                    mycursor = mydb.cursor()
-                    mycursor.execute(
-                        f"SELECT * FROM vkontakte_reg;"
-                    )
-                    myresult = mycursor.fetchall()
+#                     for x in myresult:
+#                         service = x[3]
+#                         if service == str(date_formatted) and x[9] != 'yes':
+#                             if not x[6] == None:
+#                                 prms = {
+#                                     'uuid': x[6]
+#                                 }
 
-                    for x in myresult:
-                        service = x[3]
-                        if service == str(date_formatted) and x[9] != 'yes':
-                            if not x[6] == None:
-                                prms = {
-                                    'uuid': x[6]
-                                }
+#                                 talon = requests.get(server + "/rest/booking", params=prms, timeout=(5, 8)).json()
 
-                                talon = requests.get(server + "/rest/booking", params=prms, timeout=(5, 8)).json()
+#                                 if not talon['data'] == []:
+#                                     post_message(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8])
+#                                     query = "UPDATE vkontakte_reg SET now = %s WHERE sender = %s AND date = %s;"
+#                                     mycursor.execute(query, ('yes', x[0], x[3]))
+#                                     mydb.commit()
+#                                 else:
+#                                     query = "DELETE FROM vkontakte_reg WHERE sender = %s AND date = %s AND talon = %s AND department = %s;"
+#                                     mycursor.execute(query, (x[0], x[3], x[1], x[4]))
+#                                     mydb.commit()
 
-                                if not talon['data'] == []:
-                                    post_message(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8])
-                                    query = "UPDATE vkontakte_reg SET now = %s WHERE sender = %s AND date = %s;"
-                                    mycursor.execute(query, ('yes', x[0], x[3]))
-                                    mydb.commit()
-                                else:
-                                    query = "DELETE FROM vkontakte_reg WHERE sender = %s AND date = %s AND talon = %s AND department = %s;"
-                                    mycursor.execute(query, (x[0], x[3], x[1], x[4]))
-                                    mydb.commit()
+#                     mycursor.close()
+#                     mydb.close()
 
-                    mycursor.close()
-                    mydb.close()
+#             continue
 
-            continue
-
-        except Exception as e:
-            # Вывод подробной информации об ошибке
-            print(f"Поймано исключение: {type(e).__name__}")
-            print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
-            print("Трассировка стека (stack trace):")
-            traceback.print_exc()
+#         except Exception as e:
+#             # Вывод подробной информации об ошибке
+#             print(f"Поймано исключение: {type(e).__name__}")
+#             print(f"Сообщение об ошибке: {str(e)}")
+#             import traceback
+#             print("Трассировка стека (stack trace):")
+#             traceback.print_exc()
 
 from mysql.connector import errors
 
@@ -3975,8 +3974,8 @@ def process_4():
             cursor.execute(update_query)
             myresult = cursor.fetchall()
 
-            now = datetime.datetime.now()
-            date_now = now + datetime.timedelta(hours=24)
+            now = datetime.now()
+            date_now = now + timedelta(hours=24)
             date_formatted = date_now.strftime('%Y-%m-%d')
 
             for x in myresult:
@@ -3988,8 +3987,8 @@ def process_4():
 
             connection.commit()
 
-            now = datetime.datetime.now()
-            date_now = now + datetime.timedelta(hours=24)
+            now = datetime.now()
+            date_now = now + timedelta(hours=24)
             date_formatted = date_now.strftime('%Y-%m-%d')
             time_formatted = date_now.strftime('%H:%M')
 
@@ -4126,15 +4125,160 @@ def process_8():
 #         with open(filename_mail, 'w') as file:
 #             file.write("")
 
-def process_10():
+# def process_10():
+#     """Очистка в restrictions просроченных талонов для возможности регистрации"""
+
+#     from datetime import datetime, timedelta
+
+#     # Проверка: если сейчас **не** 00:00, выход из скрипта
+#     now = datetime.now()
+#     if not (now.hour == 0 and now.minute == 0):
+#         return
+
+#     DB_CONFIG = {
+#         'host': host,
+#         'user': user,
+#         'password': password,
+#         'database': database,
+#         'port': 3306
+#     }
+
+#     EXPIRATION_DAYS = 14
+
+#     try:
+#         conn = mysql.connector.connect(**DB_CONFIG)
+#         cursor = conn.cursor(dictionary=True)
+
+#         cursor.execute("SELECT ani, restrictions FROM notification")
+#         rows = cursor.fetchall()
+
+#         now = datetime.now()
+#         updated_count = 0
+
+#         for row in rows:
+#             ani = row['ani']
+#             raw_restrictions = row['restrictions']
+
+#             try:
+#                 restrictions = json.loads(raw_restrictions)
+#             except json.JSONDecodeError:
+#                 print(f"Ошибка разбора JSON в записи {ani}")
+#                 continue
+
+#             filtered = [
+#                 r for r in restrictions
+#                 if 'date' in r and datetime.strptime(r['date'], '%Y-%m-%d') + timedelta(days=EXPIRATION_DAYS) > now
+#             ]
+
+#             if filtered != restrictions:
+#                 updated_json = json.dumps(filtered, ensure_ascii=False)
+#                 update_query = "UPDATE notification SET restrictions = %s WHERE ani = %s"
+#                 cursor.execute(update_query, (updated_json, ani))
+#                 updated_count += 1
+
+#         conn.commit()
+#         print(f"Обновлено записей: {updated_count}")
+
+#     except mysql.connector.Error as err:
+#         print(f"Ошибка MySQL: {err}")
+#     finally:
+#         if 'cursor' in locals():
+#             cursor.close()
+#         if 'conn' in locals() and conn.is_connected():
+#             conn.close()
+
+
+def send_telegram_message(ani, talon, time, date, department, service):
+    message = (
+        f"У вас скоро приём {date} в {time}! Номер вашего талона: {talon}, "
+        f"филиал: {department}, услуга: {service}.\n\n"
+        f"Нажмите /start для того, что бы подтвердить или удалить вашу запись."
+    )
+
+    keyboard = {
+        "keyboard": [[{"text": "/start", "callback_data": "/start"}]],
+        "resize_keyboard": True
+    }
+
+    data = {
+        "chat_id": ani,
+        "text": message,
+        "reply_markup": json.dumps(keyboard)
+    }
+
+    requests.post(
+        f"https://api.telegram.org/bot{config['TELEGRAM']['token_one']}/sendMessage",
+        data=data
+    )
+    requests.post(
+        f"https://api.telegram.org/bot{config['TELEGRAM']['token_two']}/sendMessage",
+        data=data
+    )
+
+
+def send_vk_message(user_id, talon, time, date, department, service):
+    from datetime import datetime
+    access_token = config["VKONTAKTE"]["token"]
+    api_version = "5.199"
+
+    random_id = random.getrandbits(31)
+
+    message = (
+        f"У вас скоро приём {date} в {time}! Номер вашего талона {talon}, "
+        f"филиал: {department}, услуга: {service}"
+    )
+
+    url = "https://api.vk.com/method/messages.send"
+    params = {
+        "access_token": access_token,
+        "v": api_version,
+        "user_id": user_id,
+        "message": message,
+        "random_id": random_id
+    }
+
+    requests.post(url, params=params)
+
+    # Отправляем клавиатуру
+    keyboard = {
+        "one_time": True,
+        "buttons": [
+            [
+                {
+                    "action": {
+                        "type": "text",
+                        "label": "Продолжить",
+                        "payload": "{\"cmd\": \"menu\"}"
+                    },
+                    "color": "positive"
+                }
+            ]
+        ]
+    }
+
+    # Простая рандомизация id
+    def custom_random():
+        t = datetime.now().timestamp()
+        seed = int((t - int(t)) * 10**6)
+        return (1103515245 * seed + 12345) % 2**31
+
+    payload = {
+        "access_token": access_token,
+        "peer_id": user_id,
+        "message": "ㅤ",
+        "keyboard": json.dumps(keyboard),
+        "random_id": custom_random(),
+        "v": "5.199"
+    }
+
+    res = requests.post(url, params=payload)
+    print(res)
+
+
+def cleanup_expired_restrictions():
     """Очистка в restrictions просроченных талонов для возможности регистрации"""
 
     from datetime import datetime, timedelta
-
-    # Проверка: если сейчас **не** 00:00, выход из скрипта
-    now = datetime.now()
-    if not (now.hour == 0 and now.minute == 0):
-        return
 
     DB_CONFIG = {
         'host': host,
@@ -4158,18 +4302,35 @@ def process_10():
 
         for row in rows:
             ani = row['ani']
+
             raw_restrictions = row['restrictions']
+            # print(raw_restrictions)
 
-            try:
-                restrictions = json.loads(raw_restrictions)
-            except json.JSONDecodeError:
-                print(f"Ошибка разбора JSON в записи {ani}")
-                continue
+            # Обработка пустого или некорректного JSON
+            if not raw_restrictions:
+                restrictions = []
+            else:
+                try:
+                    restrictions = json.loads(raw_restrictions)
+                    if not isinstance(restrictions, list):
+                        raise ValueError
+                except (json.JSONDecodeError, ValueError):
+                    restrictions = []
 
-            filtered = [
-                r for r in restrictions
-                if 'date' in r and datetime.strptime(r['date'], '%Y-%m-%d') + timedelta(days=EXPIRATION_DAYS) > now
-            ]
+            # Фильтруем только словари с ключами 'service' и 'date'
+            filtered = []
+            for r in restrictions:
+                if isinstance(r, dict) and 'service' in r and 'date' in r:
+                    try:
+                        date_obj = datetime.strptime(r['date'], '%Y-%m-%d')
+                        print(r['date'], "->", date_obj + timedelta(days=EXPIRATION_DAYS), ">", now, "=", (date_obj + timedelta(days=EXPIRATION_DAYS) > now))
+                        if date_obj + timedelta(days=EXPIRATION_DAYS) > now:
+                            filtered.append(r)
+                    except ValueError:
+                        continue
+
+            # print("Исходные:", restrictions)
+            # print("Отфильтрованные:", filtered)
 
             if filtered != restrictions:
                 updated_json = json.dumps(filtered, ensure_ascii=False)
@@ -4188,6 +4349,110 @@ def process_10():
         if 'conn' in locals() and conn.is_connected():
             conn.close()
 
+
+def process_2():
+    """Выполнение всех уведомлений и очисток за один запуск"""
+
+    from datetime import datetime, timedelta
+
+    now = datetime.now()
+    date_now = now + timedelta(hours=24)
+    date_formatted = date_now.strftime("%Y-%m-%d")
+    server = "https://equeue.mfc.tomsk.ru"
+
+    try:
+        with mysql.connector.connect(
+            host=host,
+            user=user,
+            password=password,
+            database=database,
+            connection_timeout=2
+        ) as db:
+
+            cursor = db.cursor()
+
+            # ----- TELEGRAM -----
+            cursor.execute("SELECT * FROM telegram_reg;")
+            rows = cursor.fetchall()
+
+            for x in rows:
+                if x[3] == date_formatted and x[9] != 'yes' and x[6]:
+                    talon = requests.get(
+                        f"{server}/rest/booking",
+                        params={'uuid': x[6]},
+                        timeout=(5, 8)
+                    ).json()
+
+                    if talon['data']:
+                        send_telegram_message(x[0], x[1], x[2], x[3], x[4], x[5])
+                        cursor.execute(
+                            "UPDATE telegram_reg SET now = %s WHERE ani = %s AND date = %s",
+                            ('yes', x[0], x[3])
+                        )
+                    else:
+                        cursor.execute(
+                            "DELETE FROM telegram_reg WHERE ani = %s AND date = %s AND talon = %s AND department = %s",
+                            (x[0], x[3], x[1], x[4])
+                        )
+
+            # ----- VK -----
+            cursor.execute("SELECT * FROM vkontakte_reg;")
+            rows = cursor.fetchall()
+
+            for x in rows:
+                if x[3] == date_formatted and x[9] != 'yes' and x[6]:
+                    talon = requests.get(
+                        f"{server}/rest/booking",
+                        params={'uuid': x[6]},
+                        timeout=(5, 8)
+                    ).json()
+
+                    if talon['data']:
+                        send_vk_message(x[0], x[1], x[2], x[3], x[4], x[5])
+                        cursor.execute(
+                            "UPDATE vkontakte_reg SET now = %s WHERE sender = %s AND date = %s",
+                            ('yes', x[0], x[3])
+                        )
+                    else:
+                        cursor.execute(
+                            "DELETE FROM vkontakte_reg WHERE sender = %s AND date = %s AND talon = %s AND department = %s",
+                            (x[0], x[3], x[1], x[4])
+                        )
+
+            db.commit()
+
+    except Exception as e:
+        print("Ошибка в process_2:", e)
+        import traceback
+        traceback.print_exc()
+
+def process_2_scheduler():
+    """Один процесс: в 00:00 чистим restrictions, в 15:00 запускаем рассылку"""
+
+    from datetime import datetime
+
+    last_cleanup_day = None
+    last_process_day = None
+
+    while True:
+        now = datetime.now()
+
+        # --- 00:00 cleanup ---
+        if now.hour == 0 and now.minute == 0:
+            if last_cleanup_day != now.date():
+                print("[cleanup] Запуск очистки restrictions...")
+                cleanup_expired_restrictions()
+                last_cleanup_day = now.date()
+
+        # --- 15:00 process_2 ---
+        if now.hour == 15 and now.minute == 0:
+            if last_process_day != now.date():
+                print("[process_2] Запуск рассылок...")
+                process_2()
+                last_process_day = now.date()
+
+        time.sleep(30)  # проверяем два раза в минуту
+
 from mysql.connector import Error
 from aiohttp import ClientConnectorError  # Импортируем исключение для обработки ошибок соединения
 
@@ -4195,15 +4460,16 @@ if __name__ == "__main__":
 
     process1 = Process(target=process_1)
     # process1.start()
-    process2 = Process(target=process_2)
+    # process2 = Process(target=process_2) # НЕ НУЖНО
+    process2 = Process(target=process_2_scheduler)
     # process3 = Process(target=process_3) # НЕ НУЖНО
     # process4 = Process(target=process_4) # НЕ НУЖНО
-    process5 = Process(target=process_5)
+    # process5 = Process(target=process_5) # НЕ НУЖНО
     # process6 = Process(target=process_6)
     process7 = Process(target=process_7)
     process8 = Process(target=process_8)
     # process9 = Process(target=process_9) # НЕ НУЖНО
-    process10 = Process(target=process_10)
+    # process10 = Process(target=process_10) # НЕ НУЖНО
 
     # process1.start()
     # process2.start()
@@ -4233,8 +4499,12 @@ if __name__ == "__main__":
                 process1 = Process(target=process_1)
                 process1.start()
                 # process1.join()
+            # elif not process2.is_alive():
+            #     process2 = Process(target=process_2)
+            #     process2.start()
+            #     # process2.join()
             elif not process2.is_alive():
-                process2 = Process(target=process_2)
+                process2 = Process(target=process_2_scheduler)
                 process2.start()
                 # process2.join()
             # elif not process3.is_alive():
@@ -4245,10 +4515,10 @@ if __name__ == "__main__":
             #     process4 = Process(target=process_4)
             #     process4.start()
             #     # process4.join()
-            elif not process5.is_alive():
-                process5 = Process(target=process_5)
-                process5.start()
-                # process5.join()
+            # elif not process5.is_alive():
+            #     process5 = Process(target=process_5)
+            #     process5.start()
+            #     # process5.join()
             # elif not process6.is_alive():
             #     process6 = Process(target=process_6)
             #     process6.start()
@@ -4265,10 +4535,10 @@ if __name__ == "__main__":
             #     process9 = Process(target=process_9)
             #     process9.start()
             #     # process9.join()
-            elif not process10.is_alive():
-                process10 = Process(target=process_10)
-                process10.start()
-                # process10.join()
+            # elif not process10.is_alive():
+            #     process10 = Process(target=process_10)
+            #     process10.start()
+            #     # process10.join()
         except (ClientConnectorError, Error) as e:
             # Обработка ошибок подключения и MySQL
             if isinstance(e, ClientConnectorError):
@@ -4286,10 +4556,10 @@ if __name__ == "__main__":
             process1.join()  # Ждем завершения процесса
             print("Процесс 1 был завершен.")
 
-            print("Завершение процесса 2...")
-            process2.terminate()  # Принудительное завершение процесса
-            process2.join()  # Ждем завершения процесса
-            print("Процесс 2 был завершен.")
+            # print("Завершение процесса 2...")
+            # process2.terminate()  # Принудительное завершение процесса
+            # process2.join()  # Ждем завершения процесса
+            # print("Процесс 2 был завершен.")
 
             # print("Завершение процесса 3...")
             # process3.terminate()  # Принудительное завершение процесса
@@ -4301,10 +4571,10 @@ if __name__ == "__main__":
             # process4.join()  # Ждем завершения процесса
             # print("Процесс 4 был завершен.")
 
-            print("Завершение процесса 5...")
-            process5.terminate()  # Принудительное завершение процесса
-            process5.join()  # Ждем завершения процесса
-            print("Процесс 5 был завершен.")
+            # print("Завершение процесса 5...")
+            # process5.terminate()  # Принудительное завершение процесса
+            # process5.join()  # Ждем завершения процесса
+            # print("Процесс 5 был завершен.")
 
             # print("Завершение процесса 6...")
             # process6.terminate()  # Принудительное завершение процесса
@@ -4326,10 +4596,10 @@ if __name__ == "__main__":
             # process9.join()  # Ждем завершения процесса
             # print("Процесс 9 был завершен.")
 
-            print("Завершение процесса 10...")
-            process10.terminate()  # Принудительное завершение процесса
-            process10.join()  # Ждем завершения процесса
-            print("Процесс 10 был завершен.")
+            # print("Завершение процесса 10...")
+            # process10.terminate()  # Принудительное завершение процесса
+            # process10.join()  # Ждем завершения процесса
+            # print("Процесс 10 был завершен.")
 
         except ConnectionAbortedError:
             print("Ошибка: Программа на вашем хост-компьютере разорвала установленное подключение")
@@ -4339,10 +4609,10 @@ if __name__ == "__main__":
             process1.join()  # Ждем завершения процесса
             print("Процесс 1 был завершен.")
 
-            print("Завершение процесса 2...")
-            process2.terminate()  # Принудительное завершение процесса
-            process2.join()  # Ждем завершения процесса
-            print("Процесс 2 был завершен.")
+            # print("Завершение процесса 2...")
+            # process2.terminate()  # Принудительное завершение процесса
+            # process2.join()  # Ждем завершения процесса
+            # print("Процесс 2 был завершен.")
 
             # print("Завершение процесса 3...")
             # process3.terminate()  # Принудительное завершение процесса
@@ -4354,10 +4624,10 @@ if __name__ == "__main__":
             # process4.join()  # Ждем завершения процесса
             # print("Процесс 4 был завершен.")
 
-            print("Завершение процесса 5...")
-            process5.terminate()  # Принудительное завершение процесса
-            process5.join()  # Ждем завершения процесса
-            print("Процесс 5 был завершен.")
+            # print("Завершение процесса 5...")
+            # process5.terminate()  # Принудительное завершение процесса
+            # process5.join()  # Ждем завершения процесса
+            # print("Процесс 5 был завершен.")
 
             # print("Завершение процесса 6...")
             # process6.terminate()  # Принудительное завершение процесса
@@ -4379,7 +4649,7 @@ if __name__ == "__main__":
             # process9.join()  # Ждем завершения процесса
             # print("Процесс 9 был завершен.")
 
-            print("Завершение процесса 10...")
-            process10.terminate()  # Принудительное завершение процесса
-            process10.join()  # Ждем завершения процесса
-            print("Процесс 10 был завершен.")
+            # print("Завершение процесса 10...")
+            # process10.terminate()  # Принудительное завершение процесса
+            # process10.join()  # Ждем завершения процесса
+            # print("Процесс 10 был завершен.")
