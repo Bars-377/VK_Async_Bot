@@ -3066,10 +3066,11 @@ def process_1():
                 ctx.set(f'{user_id}: field_1', payload_data)
                 keyboard = await buttons.menu_menu()
                 return await message.answer("Кратко изложите суть обращения", keyboard=keyboard)
-            elif service_id in ('976eb69d-83cb-42b9-893a-926e11956393', 'f94fd42b-611b-460a-8270-059526b40d35') and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
-                keyboard = await buttons.yes_no()
-                return await message.answer("Обращается иностранный гражданин?", keyboard=keyboard)
+            # elif service_id in ('976eb69d-83cb-42b9-893a-926e11956393', 'f94fd42b-611b-460a-8270-059526b40d35') and field_1 == 'None':
+            #     ctx.set(f'{user_id}: field_1', payload_data)
+            #     keyboard = await buttons.yes_no()
+            #     print('POPAL')
+            #     return await message.answer("Обращается иностранный гражданин?", keyboard=keyboard)
             elif service_id == '81914e42-5ce6-477a-a49c-52299d37f8ca' and field_1 == 'None':
                 ctx.set(f'{user_id}: field_1', payload_data)
                 keyboard = await buttons.menu_menu()
@@ -3113,12 +3114,13 @@ def process_1():
                         ctx.set(f'{user_id}: field_5', payload_data)
                         field_5 = ctx.get(f'{user_id}: field_5')
 
-                    if field_5 == 'no' and service_id in 'f94fd42b-611b-460a-8270-059526b40d35':
-                        ctx.set(f'{user_id}: field_1', 'None')
-                        ctx.set(f'{user_id}: field_5', 'None')
-                        await bot.state_dispenser.set(message.peer_id, SuperStates.DEPARTMENT)
-                        keyboard = await buttons.services_section(ctx.get(f'{user_id}: department'))
-                        return await message.answer("Выберите услугу", keyboard=keyboard)
+                    # if field_5 == 'no' and service_id in 'f94fd42b-611b-460a-8270-059526b40d35':
+                    #     print('TEST 3')
+                    #     ctx.set(f'{user_id}: field_1', 'None')
+                    #     ctx.set(f'{user_id}: field_5', 'None')
+                    #     await bot.state_dispenser.set(message.peer_id, SuperStates.DEPARTMENT)
+                    #     keyboard = await buttons.services_section(ctx.get(f'{user_id}: department'))
+                    #     return await message.answer("Выберите услугу", keyboard=keyboard)
 
                     if field_5 == 'yes' and service_id == '4b7b705a-8b12-4f07-b26f-d573e6f096c2' and ctx.get(f'{user_id}: field_3') == 'None':
                         keyboard = await buttons.menu_menu()
@@ -3154,11 +3156,6 @@ def process_1():
                             "2703ff9e-319c-4b0a-a152-67b3614839d1": field_5,
                             "75654cbd-f06c-4a15-b13c-45c21a8e693d": field_5,
                             "5fd82d26-78c1-4223-9f2f-9b4c044f0b88": field_2,
-                            "cb3e610a-49cc-45c3-a7e4-7867036551ea": field_2,
-                            "6e349207-5486-4efa-90a2-0f5b86765b36": field_3,
-                            "fec9e657-aa1c-428a-a7d9-c4d977d7cccd": field_4,
-                            "6c8b9903-e522-4d95-af0d-d7d1f688aa62": field_5,
-                            "aa50aae2-8879-4945-9553-825e911fc9c4": field_6,
                             "48b24708-ad36-4aa7-9772-17940e7741c8": field_2,
                             "cf535155-7337-4310-84d5-3e6e720bf36e": field_5,
                             "56ed2b59-2293-42c7-8493-46d30cfebdf6": field_3,
