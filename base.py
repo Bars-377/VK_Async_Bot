@@ -1931,7 +1931,7 @@ class base:
             await db.connect()
 
             result = await db.search(
-                'DATE(process_date) AS process_date',
+                'DATE(order_date) AS order_date',
                 'public.cpgu_order',
                 'order_number = $1',
                 params=[str(order_number)],
@@ -1940,7 +1940,7 @@ class base:
 
             await db.close()
 
-            return result['process_date'] if result else None
+            return result['order_date'] if result else None
 
         except Exception as e:
             # Вывод подробной информации об ошибке
