@@ -68,12 +68,6 @@ class buttons:
             #     keyboard.row()
             keyboard.add(Text("Земля, дом, квартира (недвижимость)", {"cmd": "nedvij"}), color=KeyboardButtonColor.POSITIVE)
             keyboard.row()
-            if department == "425":
-                keyboard.add(Text("Консультация с уполномоченным по правам человека по ТО", {"cmd": "cons_prav"}),color=KeyboardButtonColor.POSITIVE)
-                keyboard.row()
-            if department == "431":
-                keyboard.add(Text("Консультация специалиста Росреестра", {"cmd": "kons_rosres"}), color=KeyboardButtonColor.POSITIVE)
-                keyboard.row()
             keyboard.add(Text("Выплаты, путёвки, пенсии", {"cmd": "vipl_sdel"}), color=KeyboardButtonColor.POSITIVE)
             keyboard.row()
             if department != "371" and not department in change_service:
@@ -84,7 +78,7 @@ class buttons:
             if department in change_service:
                 keyboard.add(Text("ТОСП", {"cmd": "tosp"}), color=KeyboardButtonColor.POSITIVE)
                 keyboard.row()
-            if department == "461" or department == "533":
+            if department == "461" or department == "533" or department == "425" or department == "431":
                 keyboard.add(Text("Консультации", {"cmd": "konsul"}),color=KeyboardButtonColor.POSITIVE)
                 keyboard.row()
             # if (department == "689"):
@@ -155,6 +149,12 @@ class buttons:
                 keyboard.add(Text("Росреестр", {"cmd": "kons_rosres"}), color=KeyboardButtonColor.POSITIVE)
                 keyboard.row()
                 keyboard.add(Text("Нотариусо", {"cmd": "notar"}),color=KeyboardButtonColor.POSITIVE)
+                keyboard.row()
+            if department == "425":
+                keyboard.add(Text("с Уполномоченным по правам человека", {"cmd": "cons_prav"}),color=KeyboardButtonColor.POSITIVE)
+                keyboard.row()
+            if department == "431":
+                keyboard.add(Text("специалиста  Росреестра", {"cmd": "kons_rosres"}), color=KeyboardButtonColor.POSITIVE)
                 keyboard.row()
             keyboard.add(Text("Назад", {"cmd": "back"}), color=KeyboardButtonColor.NEGATIVE)
             keyboard.row()
@@ -645,7 +645,7 @@ class buttons:
             keyboard.add(Text("Октябрьский", {"cmd": "oktyabrskiy"}), color=KeyboardButtonColor.POSITIVE)
             keyboard.add(Text("Советский", {"cmd": "sovetskiy"}), color=KeyboardButtonColor.POSITIVE)
             keyboard.row()
-            keyboard.add(Text("Академгородок", {"cmd": "razv"}), color=KeyboardButtonColor.POSITIVE)
+            keyboard.add(Text("Академгородок", {"cmd": "oez-tvt"}), color=KeyboardButtonColor.POSITIVE)
             # keyboard.add(Text('"Дом предпринимателя"', {"cmd": "mfc_business"}),color=KeyboardButtonColor.POSITIVE)
             # keyboard.row()
             keyboard.add(Text('"Дом предпринимателя"', {"cmd": "dom-predprinimatelya"}), color=KeyboardButtonColor.POSITIVE)
