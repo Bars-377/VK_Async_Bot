@@ -74,7 +74,7 @@ def treatment_p(id, fio, contacts,type_service, service, date, category):
 
     # Создайте сообщение электронной почты
     message = EmailMessage()
-    message["Subject"] = f"Заявка на платную услугу от {fio}"
+    message["Subject"] = f"Заявка на выезд от {fio}"
     message["From"] = sender_email_address
     if 'северск' in contacts.lower():
         message["To"] = 'zatoseversk@mfc.tomsk.ru'  # Адрес получателя
@@ -82,7 +82,7 @@ def treatment_p(id, fio, contacts,type_service, service, date, category):
         message["To"] = 'msptosp@mfc.tomsk.ru'  # Адрес получателя
 
     # Установите текстовое содержимое письма
-    message.set_content(f"Заявка на платную у слугу от {fio}")
+    message.set_content(f"Заявка на выезд от {fio}")
 
     # Четвёртая строка таблицы
     table.cell(3, 0).text = "Наименование категории граждан, для которых организация выезда через МФЦ осуществляется бесплатно*"
