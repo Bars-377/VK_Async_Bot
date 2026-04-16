@@ -4450,6 +4450,152 @@ def process_2_scheduler():
 
         time.sleep(30)  # проверяем два раза в минуту
 
+"""SENDS_VK"""
+def send_vk_worker():
+    import mysql.connector
+    import requests
+    import time
+
+    # Функция для генерации "случайных" чисел без использования модуля random
+    def custom_random():
+        current_time = time.time()
+        seed = int((current_time - int(current_time)) * 10**6)  # Используем миллионные доли секунды в качестве зерна для "случайности"
+        next_number = (1103515245 * seed + 12345) % 2**31  # Простой линейный конгруэнтный генератор
+        return next_number
+
+    def handler():
+
+        while True:
+
+            exists_1 = None  # ✅ ВАЖНО
+
+            try:
+                with mysql.connector.connect(
+                host=host,
+                user=user,
+                password=password,
+                database=database,
+                connection_timeout=2
+                ) as mydb:
+                    mycursor = mydb.cursor()
+
+                    # Проверка наличия записи с данным ani
+                    check_query_1 = "SELECT * FROM send_vk;"
+                    mycursor.execute(check_query_1,)
+                    exists_1 = mycursor.fetchone()
+
+            except Exception as err:
+                # print(f"Something went wrong 1: {err}")
+                pass
+
+            finally:
+                mycursor.close()
+                mydb.close()
+
+            if exists_1:
+                ani = exists_1[0]
+                message = exists_1[1]
+
+                try:
+                    with mysql.connector.connect(
+                    host=host,
+                    user=user,
+                    password=password,
+                    database=database,
+                    connection_timeout=2
+                    ) as mydb:
+                        mycursor = mydb.cursor()
+
+                        # Проверка наличия записи с данным ani
+                        check_query = "SELECT * FROM notification WHERE ani = %s;"
+                        mycursor.execute(check_query, (ani,))
+                        exists = mycursor.fetchone()
+
+                except Exception as err:
+                    # print(f"Something went wrong 2: {err}")
+                    pass
+
+                finally:
+                    mycursor.close()
+                    mydb.close()
+
+                if exists:
+
+                    id_vk = exists[1]
+                    id_tb = exists[2]
+
+                    decoded_string = message.replace("\\n", "\n")
+                    decoded_string = decoded_string.strip().replace("\\n", "\n")
+                    # decoded_string = decoded_string.strip().replace(" ", "")
+                    decoded_string = decoded_string.replace(" \n", "\n")
+                    decoded_string = decoded_string.replace("\n ", "\n")
+
+                    # print(type(message))
+                    # print(message)
+                    # print(type(decoded_string))
+                    # print(decoded_string)
+
+                    # Данные для авторизации
+                    access_token = config["VKONTAKTE"]["access_token"]
+                    api_version = "5.199"
+
+                    # Генерация случайного числа для random_id
+                    random_id = custom_random()
+
+                    # URL для отправки сообщения
+                    url = f"https://api.vk.com/method/messages.send"
+
+                    # Параметры запроса
+                    params = {
+                        "access_token": access_token,
+                        "v": api_version,
+                        "user_id": id_vk,
+                        "message": decoded_string,
+                        "random_id": random_id
+                    }
+
+                    # Отправляем POST-запрос
+                    requests.post(url, params=params)
+
+                    # data = {
+                    #     "chat_id": id_tb,
+                    #     "text": decoded_string
+                    # }
+
+                    # requests.post(f"https://api.telegram.org/bot{TOKEN_ONE}/sendMessage", data=data)
+                    # requests.post(f"https://api.telegram.org/bot{TOKEN_TWO}/sendMessage", data=data)
+
+                try:
+                    with mysql.connector.connect(
+                    host=host,
+                    user=user,
+                    password=password,
+                    database=database,
+                    connection_timeout=2
+                    ) as mydb:
+                        mycursor = mydb.cursor()
+
+                        mycursor.execute(
+                            f"DELETE FROM send_vk WHERE ani = %s AND message = %s",
+                            (ani, message)
+                        )
+
+                        mydb.commit()
+
+                except Exception as e:
+                    # Вывод подробной информации об ошибке
+                    print(f"Поймано исключение: {type(e).__name__}")
+                    print(f"Сообщение об ошибке: {str(e)}")
+                    import traceback
+                    print("Трассировка стека (stack trace):")
+                    traceback.print_exc()
+
+                finally:
+                    mycursor.close()
+                    mydb.close()
+
+    handler()
+
 from mysql.connector import Error
 from aiohttp import ClientConnectorError  # Импортируем исключение для обработки ошибок соединения
 
@@ -4457,6 +4603,7 @@ if __name__ == "__main__":
 
     process1 = Process(target=process_1)
     # process1.start()
+    send_vk_process = Process(target=send_vk_worker) # НЕ НУЖНО
     # process2 = Process(target=process_2) # НЕ НУЖНО
     process2 = Process(target=process_2_scheduler)
     # process3 = Process(target=process_3) # НЕ НУЖНО
@@ -4470,6 +4617,7 @@ if __name__ == "__main__":
 
     # process1.start()
     # process2.start()
+    # send_vk_process.start()
     # process3.start()
     # process4.start()
     # process5.start()
@@ -4481,6 +4629,7 @@ if __name__ == "__main__":
 
     # process1.join()
     # process2.join()
+    # send_vk_process.join()
     # process3.join()
     # process4.join()
     # process5.join()
@@ -4500,6 +4649,10 @@ if __name__ == "__main__":
             #     process2 = Process(target=process_2)
             #     process2.start()
             #     # process2.join()
+            elif not send_vk_process.is_alive():
+                send_vk_process = Process(target=send_vk_worker)
+                send_vk_process.start()
+                # send_vk.join()
             elif not process2.is_alive():
                 process2 = Process(target=process_2_scheduler)
                 process2.start()
@@ -4553,6 +4706,11 @@ if __name__ == "__main__":
             process1.join()  # Ждем завершения процесса
             print("Процесс 1 был завершен.")
 
+            print("Завершение процесса send_vk_process...")
+            send_vk_process.terminate()  # Принудительное завершение процесса
+            send_vk_process.join()  # Ждем завершения процесса
+            print("Процесс send_vk_process был завершен.")
+
             print("Завершение процесса 2...")
             process2.terminate()  # Принудительное завершение процесса
             process2.join()  # Ждем завершения процесса
@@ -4605,6 +4763,11 @@ if __name__ == "__main__":
             process1.terminate()  # Принудительное завершение процесса
             process1.join()  # Ждем завершения процесса
             print("Процесс 1 был завершен.")
+
+            print("Завершение процесса send_vk_process...")
+            send_vk_process.terminate()  # Принудительное завершение процесса
+            send_vk_process.join()  # Ждем завершения процесса
+            print("Процесс send_vk_process был завершен.")
 
             print("Завершение процесса 2...")
             process2.terminate()  # Принудительное завершение процесса
