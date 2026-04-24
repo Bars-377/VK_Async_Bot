@@ -1019,7 +1019,7 @@ class base:
                     # Удаление символов '{' и '}'
                     fields = fields.replace("'", '"')
 
-                server = "https://equeue.mfc.tomsk.ru"
+                server = "http://172.18.11.104:8010"
 
                 prms_dates = {
                     "mfc": int(department),
@@ -1045,7 +1045,7 @@ class base:
                     # Удаление символов '{' и '}'
                     fields = fields.replace("'", '"')
 
-                server = "https://equeue.mfc.tomsk.ru"
+                server = "http://172.18.11.104:8010"
 
                 prms_times = {
                     "mfc": int(department),
@@ -1179,7 +1179,7 @@ class base:
                         return key
                 return None
 
-            server = "https://equeue.mfc.tomsk.ru"
+            server = "http://172.18.11.104:8010"
             async with aiohttp.ClientSession() as session:
                 async with session.post(server + "/rest/book", json=prms, timeout=10) as response:
                     response_res = await response.json()
@@ -2004,7 +2004,7 @@ class base:
 
         try:
 
-            server = "https://equeue.mfc.tomsk.ru"
+            server = "http://172.18.11.104:8010"
 
             SERVICES = [
                 'Паспорт, прописка, ИНН, СНИЛС, ОМС',
@@ -2139,7 +2139,7 @@ class base:
     async def delete_coupons(self, service_id, talon_id, esiaid, talon, department, date, time, phone_dummy, fio, talons_all):
         try:
 
-            server = "https://equeue.mfc.tomsk.ru"
+            server = "http://172.18.11.104:8010"
 
             prms = {
                 'id': talon_id,

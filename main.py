@@ -1993,6 +1993,10 @@ def process_1():
             await debug_print('ВЫХОД ИЗ ФУНКЦИИ filials', user_id)
             if payload_data == 'filials' or payload_data == 'back_1' or payload_data == 'back':
 
+                """ТЕХНИЧЕСКИЕ РАБОТЫ"""
+                await message.answer("Проведение технических работ")
+                return await user_verification(user_id, message, users_info)
+
                 answer = await base(user_id = user_id).phone_select()
 
                 agreement_answer = await base(user_id = user_id).agreement_select()
