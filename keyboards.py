@@ -6,7 +6,7 @@ tomsk_district = ('395', '491', '443', '401', '539',
 '575', '437', '479', '383', '329', '419', '599', '731',
 '551', '725', '527', '521', '623', '371', '509')
 
-city = ('533', '689', '641', '461')
+city = ('533', '689', '641', '461', '9703142')
 
 class buttons:
     async def filials(*args):
@@ -306,7 +306,7 @@ class buttons:
             keyboard = Keyboard(one_time=True, inline=False)
 
 
-            if not department in tomsk_district and not department in city:
+            if not department in tomsk_district and department in city:
                 keyboard.add(Text("Паспорт", {"cmd": "passport"}), color=KeyboardButtonColor.POSITIVE)
                 keyboard.row()
                 keyboard.add(Text("Регистрация/снятие по ПМЖ /ПМП", {"cmd": "residency"}), color=KeyboardButtonColor.POSITIVE)
@@ -725,6 +725,8 @@ class buttons:
     async def tomsk_rayon(*args):
         try:
             keyboard = Keyboard(one_time=True, inline=False)
+            keyboard.add(Text("Южные Ворота", {"cmd": "y-vorota"}), color=KeyboardButtonColor.POSITIVE)
+            keyboard.row()
             keyboard.add(Text("д. Воронино", {"cmd": "d-voronino"}), color=KeyboardButtonColor.POSITIVE)
             keyboard.add(Text("д. Кисловска", {"cmd": "d-kislovka"}), color=KeyboardButtonColor.POSITIVE)
             keyboard.row()
