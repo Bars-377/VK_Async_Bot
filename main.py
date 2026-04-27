@@ -496,9 +496,12 @@ def process_1():
                     'plant_usl': buttons.services_paid,
                     'konsul': buttons.services_consultation,
                     'serv_section': buttons.services_section,
+                    # 'serv_sec_1': buttons.services_section_1,
                     'port_gos': buttons.services_social_1,
                     'vipl_sdel': buttons.services_social_2,
-                    'tosp': buttons.services_social_3
+                    'tosp_1': buttons.services_social_3,
+                    'tosp_2': buttons.services_social_4,
+                    'serv_vipl': buttons.services_vipl
                 }
 
                 if payload_data in commands_1:
@@ -1993,9 +1996,9 @@ def process_1():
             await debug_print('ВЫХОД ИЗ ФУНКЦИИ filials', user_id)
             if payload_data == 'filials' or payload_data == 'back_1' or payload_data == 'back':
 
-                """ТЕХНИЧЕСКИЕ РАБОТЫ"""
-                await message.answer("Проведение технических работ")
-                return await user_verification(user_id, message, users_info)
+                # """ТЕХНИЧЕСКИЕ РАБОТЫ"""
+                # await message.answer("Проведение технических работ")
+                # return await user_verification(user_id, message, users_info)
 
                 answer = await base(user_id = user_id).phone_select()
 
@@ -2234,9 +2237,12 @@ def process_1():
                 'plant_usl': buttons.services_paid,
                 'konsul': buttons.services_consultation,
                 'serv_section': buttons.services_section,
+                # 'serv_sec_1': buttons.services_section_1,
                 'port_gos': buttons.services_social_1,
                 'vipl_sdel': buttons.services_social_2,
-                'tosp': buttons.services_social_3
+                'tosp_1': buttons.services_social_3,
+                'tosp_2': buttons.services_social_4,
+                'serv_vipl': buttons.services_vipl
             }
 
             commands_2 = {
@@ -2855,9 +2861,12 @@ def process_1():
                 'plant_usl': buttons.services_paid,
                 'konsul': buttons.services_consultation,
                 'serv_section': buttons.services_section,
+                # 'serv_sec_1': buttons.services_section_1,
                 'port_gos': buttons.services_social_1,
                 'vipl_sdel': buttons.services_social_2,
-                'tosp': buttons.services_social_3
+                'tosp_1': buttons.services_social_3,
+                'tosp_2': buttons.services_social_4,
+                'serv_vipl': buttons.services_vipl
             }
 
             # Пример вызова функции по ключу
