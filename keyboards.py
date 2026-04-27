@@ -318,6 +318,9 @@ class buttons:
                 keyboard.add(Text("Загранпаспорт (10 лет)", {"cmd": "zagran_10"}), color=KeyboardButtonColor.POSITIVE)
                 keyboard.row()
 
+            if department in tomsk_district or department in city:
+                keyboard.add(Text("ИНН, СНИЛС, ОМС", {"cmd": "snils"}), color=KeyboardButtonColor.POSITIVE)
+                keyboard.row()
 
             if department == '533' and department == '431':
                 keyboard.add(Text("Загранпаспорт (10 лет)", {"cmd": "zagran_10"}), color=KeyboardButtonColor.POSITIVE)
