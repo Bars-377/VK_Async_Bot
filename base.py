@@ -2075,7 +2075,7 @@ class base:
                 talon_id = talon_id.rsplit(', ')[:-1]
                 esiaid = esiaid.rsplit(', ')[:-1]
                 code = code.rsplit(', ')[:-1]
-                pin_code = code.rsplit(', ')[:-1]
+                pin_code = pin_code.rsplit(', ')[:-1]
 
                 time_ = []
                 times = []
