@@ -2007,25 +2007,25 @@ class base:
 
             server = "http://172.18.11.104:8010"
 
-            SERVICES = [
-                'Паспорт, прописка, ИНН, СНИЛС, ОМС',
-                'Субсидии, льготы, компенсации, пенсии',
-                'Предоставление сведений из ЕГРН',
-                'Прекращение, приостановка, приобщение документов по ранее принятому делу (недвижимость)',
-                'Справки УМВД и Пенсионного фонда (справки о несудимости, выписки ИЛС, справки о размере пенсии и другие)',
-                'Получение разрешений органов опеки г. Томск',
-                'Портал Госуслуги.ру'
-            ]
+            # SERVICES = [
+            #     'Паспорт, прописка, ИНН, СНИЛС, ОМС',
+            #     'Субсидии, льготы, компенсации, пенсии',
+            #     'Предоставление сведений из ЕГРН',
+            #     'Прекращение, приостановка, приобщение документов по ранее принятому делу (недвижимость)',
+            #     'Справки УМВД и Пенсионного фонда (справки о несудимости, выписки ИЛС, справки о размере пенсии и другие)',
+            #     'Получение разрешений органов опеки г. Томск',
+            #     'Портал Госуслуги.ру'
+            # ]
 
-            REPLACEMENT_SERVICES = [
-                'по оформлению личных документов гражданина',
-                'по оформлению Субсидии, льготы, компенсации, пенсии',
-                'по предоставлению сведений из ЕГРН',
-                'Приобщение, приостановка, прекращение',
-                'Справки УМВД, Пенсионного фонда и налоговой',
-                'Получение разрешений органов опеки города Томска',
-                'По регистрации на портале Госуслуг или в личном кабинете налогоплательщика'
-            ]
+            # REPLACEMENT_SERVICES = [
+            #     'по оформлению личных документов гражданина',
+            #     'по оформлению Субсидии, льготы, компенсации, пенсии',
+            #     'по предоставлению сведений из ЕГРН',
+            #     'Приобщение, приостановка, прекращение',
+            #     'Справки УМВД, Пенсионного фонда и налоговой',
+            #     'Получение разрешений органов опеки города Томска',
+            #     'По регистрации на портале Госуслуг или в личном кабинете налогоплательщика'
+            # ]
 
             phone_dummy = (args,)[0][0]
             phone_dummy = phone_dummy.replace(' ', '')
@@ -2091,24 +2091,24 @@ class base:
                     time_[i] = str(time_[i][0]) + '-' + str(time_[i][1]) + '-' + str(time_cache[0])
                     time_cache = time_cache[1]
                     # time_[i] = format_date(time_[i]) + ' в ' + time_cache.replace(':', ' часов ') + ' минут'
-                    time_[i] = time_[i] + ' в ' + time_cache
+                    time_[i] = time_[i] + '\nВремя: ' + time_cache
 
-                for i in range(len(SERVICES)):
-                    for k in range(len(service_name)):
-                        if service_name[k] == SERVICES[i]:
-                            service_name[k] = service_name[k].replace(
-                                SERVICES[i], REPLACEMENT_SERVICES[i])
+                # for i in range(len(SERVICES)):
+                #     for k in range(len(service_name)):
+                #         if service_name[k] == SERVICES[i]:
+                #             service_name[k] = service_name[k].replace(
+                #                 SERVICES[i], REPLACEMENT_SERVICES[i])
 
                 service_name_time = ''
                 for i in range(len(service_name)):
-                    if len(talon_id) > 1 and i < len(talon_id) - 1:
-                        p = '\n'
-                    else:
-                        p = ''
-                    service_name_time += 'Ваш талон: '
-                    service_name_time += 'в филиале: ' + location_name[i] + ', адрес: ' + \
-                    location_address[i] + ', услуга: ' + service_name[i] + ', время визита: ' + \
-                    time_[i]  + ', номер талона: ' + talons['data'][i]['code'] + ', пин-код: ' + talons['data'][i]['pin_code'] + p
+                    # if len(talon_id) > 1 and i < len(talon_id) - 1:
+                    #     p = '\n'
+                    # else:
+                    #     p = ''
+                    service_name_time += 'Талон: ' + talons['data'][i]['code']
+                    service_name_time += "\nДата: " + time_[i] + '\nАдрес: ' + location_address[i]
+                    service_name_time += "\nУслуга: " + service_name[i]
+                    service_name_time += '\nВаш пин-код: ' + talons['data'][i]['pin_code'] + "\n\n"
 
                 res = {
                     "code_": 'yes',

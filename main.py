@@ -2146,7 +2146,7 @@ def process_1():
                     return await message.answer(f'Произошла ошибка поиска талонов. Попробуйте ещё раз.', keyboard=keyboard)
                 keyboard = await buttons.menu_menu()
                 await message.answer(f'Талоны с номером телефона {ctx.get(f'{user_id}: phone')}:')
-                return await message.answer(f"{answer['service_name_time']}", keyboard=keyboard)
+                return await message.answer(f"{answer['service_name_time']}\n\nНе ранее, чем за 30 минут до начала приема Вам необходимо активировать талон в терминале электронной очереди по пин-коду.", keyboard=keyboard)
 
             elif payload_data == 'information_mfc':
                 # await message.answer('🎅В связи с новогодними праздниками МФЦ Томской области изменит режим работы.\n\n🏢Отделы МФЦ Томской области:\n🎄с 31 декабря по 11 января - нерабочие праздничные дни.\n🗓С 12 января отделы МФЦ продолжат работу в обычном режиме.\n\n☎️Горячая линия МФЦ (8-800-350-08-50, 602-999):\n🎄30 декабря - до 20:00;\n🎄с 31 декабря по 1 января - нерабочие праздничные дни;\n🎄2 января - с 8:00 и далее круглосуточно.')
