@@ -1192,7 +1192,8 @@ class base:
                     "phone": self.tel,
                     "visitTime": time,
                     "dateTime": date,
-                    'department': await get_key_by_value(filials, filial)
+                    'department': await get_key_by_value(filials, filial),
+                    'pin_code': response_res["data"]["pin_code"]
                 }
 
                 date_ = str(datetime.datetime.now().date())
@@ -2053,6 +2054,7 @@ class base:
                 talon_id = ''
                 esiaid = ''
                 code = ''
+                pin_code = ''
                 for i in range(len(talons['data'])):
                     location_name += str(talons['data'][i]['location']['name']) + ',  '
                     location_address += str(talons['data'][i]['location']['address']) + ',  '
@@ -2062,6 +2064,7 @@ class base:
                     talon_id += str(talons['data'][i]['id']) + ', '
                     esiaid += str(talons['data'][i]['customer'].get('esiaId', '')) + ', '
                     code += str(talons['data'][i]['code']) + ', '
+                    pin_code += str(talons['data'][i]['pin_code']) + ', '
 
                 # Массив
                 location_name = location_name.rsplit(',  ')[:-1]
@@ -2072,6 +2075,7 @@ class base:
                 talon_id = talon_id.rsplit(', ')[:-1]
                 esiaid = esiaid.rsplit(', ')[:-1]
                 code = code.rsplit(', ')[:-1]
+                pin_code = code.rsplit(', ')[:-1]
 
                 time_ = []
                 times = []
@@ -2104,7 +2108,7 @@ class base:
                     service_name_time += 'Ваш талон: '
                     service_name_time += 'в филиале: ' + location_name[i] + ', адрес: ' + \
                     location_address[i] + ', услуга: ' + service_name[i] + ', время визита: ' + \
-                    time_[i]  + ', номер талона: ' + talons['data'][i]['code'] + p
+                    time_[i]  + ', номер талона: ' + talons['data'][i]['code'] + ', пин-код: ' + talons['data'][i]['pin_code'] + p
 
                 res = {
                     "code_": 'yes',
@@ -2113,6 +2117,7 @@ class base:
                     'esiaid': esiaid,
                     'service_id': service_id,
                     'code': code,
+                    'pin_code': pin_code,
                     'department': location_name,
                     'dates': dates,
                     'times': times,

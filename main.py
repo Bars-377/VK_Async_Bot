@@ -3511,7 +3511,7 @@ def process_1():
                 #     answer_1 = f"{ctx.get(f'{user_id}: fio')}, {ctx.get(f'{user_id}: phone')}, Номер талона: " + str(res['number']) + ', дата визита: ' + str(res['dateTime'] + ', время визита: ' + str(res['visitTime']) + ', место визита: ' + str(res["department"]))
                 #     await write_to_file(answer_1)
 
-                answer = "Вы записаны. Ваш номер талона: " + str(res['number']) + ', дата визита: ' + str(res['dateTime'] + ', время визита: ' + str(res['visitTime']) + ', место визита: ' + str(res["department"]))
+                answer = "Вы записаны на приём.\nТалон: " + str(res['number']) + "\nДата: " + str(res['dateTime']) + "\nВремя: " + str(res['visitTime']) + "\nАдрес: " + str(res["department"]) + "\nНе ранее, чем за 30 минут до начала приема Вам необходимо активировать талон в терминале электронной очереди по пин-коду.\nВаш пин-код:" + str(res["pin_code"])
                 await message.answer(answer)
 
                 return await user_verification(user_id, message, users_info)
