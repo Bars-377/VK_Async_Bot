@@ -313,13 +313,13 @@ class buttons:
                 keyboard.row()
                 keyboard.add(Text("Миграционный учет", {"cmd": "migration"}), color=KeyboardButtonColor.POSITIVE)
                 keyboard.row()
-                keyboard.add(Text("Водительское удостоверение", {"cmd": "license"}), color=KeyboardButtonColor.POSITIVE)
+                keyboard.add(Text("Водительское/ ЗАГС/ ОМС", {"cmd": "license"}), color=KeyboardButtonColor.POSITIVE)
                 keyboard.row()
                 keyboard.add(Text("Загранпаспорт (10 лет)", {"cmd": "zagran_10"}), color=KeyboardButtonColor.POSITIVE)
                 keyboard.row()
 
             if department in tomsk_district or department in city:
-                keyboard.add(Text("ИНН, СНИЛС, ОМС", {"cmd": "snils"}), color=KeyboardButtonColor.POSITIVE)
+                keyboard.add(Text("ИНН, СНИЛС, Справки", {"cmd": "snils"}), color=KeyboardButtonColor.POSITIVE)
                 keyboard.row()
 
             if department == '533' and department == '431':
