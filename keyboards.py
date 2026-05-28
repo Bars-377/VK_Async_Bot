@@ -143,11 +143,10 @@ class buttons:
             keyboard.add(Text("Социальные выплаты, пенсии", {"cmd": "viplata"}), color=KeyboardButtonColor.POSITIVE)
             keyboard.row()
 
-            if department in city:
+            if not department in tomsk_district:
                 keyboard.add(Text("Субсидии/ ЖКУ", {"cmd": "lgot"}), color=KeyboardButtonColor.POSITIVE)
                 keyboard.row()
-            elif not department in tomsk_district:
-                keyboard.add(Text("Субсидии/ ЖКУ", {"cmd": "lgot"}), color=KeyboardButtonColor.POSITIVE)
+                keyboard.add(Text("Газификация/ Банкротство", {"cmd": "gas_bank"}), color=KeyboardButtonColor.POSITIVE)
                 keyboard.row()
 
             keyboard.add(Text("Назад", {"cmd": "back"}), color=KeyboardButtonColor.NEGATIVE)
@@ -349,7 +348,7 @@ class buttons:
             keyboard.row()
             keyboard.add(Text("Предпринимательство", {"cmd": "predprin"}), color=KeyboardButtonColor.POSITIVE)
             keyboard.row()
-            keyboard.add(Text("Банкротство ФЛ", {"cmd": "bankr"}), color=KeyboardButtonColor.POSITIVE)
+            keyboard.add(Text("Предпринимательство/ Лицензирование", {"cmd": "bankr"}), color=KeyboardButtonColor.POSITIVE)
             keyboard.row()
             keyboard.add(Text("Справки УМВД", {"cmd": "sprav"}), color=KeyboardButtonColor.POSITIVE)
             keyboard.row()

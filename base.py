@@ -8,264 +8,6 @@ import requests
 
 cache = {}
 
-# filials = {
-#             'Кировский (г. Томск, пр-т Фрунзе, д.103д)': '533',
-#             'Ленинский (г. Томск, пер. Дербышевский, д. 26 Б)': '461',
-#             'Октябрьский (г. Томск, ул. Пушкина, д. 63, стр. 5)': '641',
-#             'Советский (г. Томск, ул. Тверская, д. 74)': '689',
-#             'Александровский (Томская область, с.Александровское,ул. Лебедева, д. 30)': '425',
-#             'Дом предпринимателя (Томская область, Московский тракт, д12)': '371',
-#             'ЗАТО Северск (Томская область, ЗАТО Северск, пр. Коммунистический, д. 103)': '431',
-#             'Зырянский (Томская область, Зырянский район, Зырянское село, Советская улица, д.46А)': '665',
-#             'Кожевниковский (Томская область, Кожевниковский район,с. Кожевниково, ул. Парковая, д. 1, стр. 3)': '377',
-#             'ПАО «Банк Уралсиб» (г. Томск, пр. Фрунзе, д.11а)': '557',
-#             'ПАО «Томскпромстройбанк» (г. Томск, пр. Фрунзе, д.90)': '389',
-#             'ПАО Банк «Левобережный» (г. Томск, пер. Совпартшкольный, д.13)': '449',
-#             'ПАО Банк «ФК Открытие» (г. Томск, ул. Набережная реки Ушайки, д16)': '677',
-#             'п.Большая Саровка (Томская область, Колпашевский район,п. Большая Саровка, ул. Советская, д. 35/2)': '605',
-#             'п.Зональная (Томская область, Томский район,п. Зональная Станция, ул. Солнечная, д. 23)': '443',
-#             'Первомайский (Томская область, Первомайский район,с. Первомайское, ул. Степная, д. 26)': '719',
-#             'с.Анастасьевка (Томская область, Шегарский район,с. Анастасьевка, пер. Школьный, д. 2)': '659',
-#             'с.Зоркальцево (Томская область, Томский район,с. Зоркальцево, ул. Совхозная, д. 14)': '479',
-#             'с.Малиновка(Кожевниковский) (Томская область, Кожевниковский район,с. Малиновка, ул.Школьная, д. 13)': '713',
-#             'с.Межениновка (Томская область, Томский район,с. Межениновка, ул. Первомайская, д. 23)': '731',
-#             'с.Моряковский (Томская область, Томский район сельское поселение Моряковское, с.Моряковский Затон, ул. Советская, д. 27)': '551',
-#             'с.Новопокровка (Томская область, Кожевниковский район,с. Новопокровка, ул. Садовая, д. 2а)': '407',
-#             'с.Новорождественское (Томская область, Томский район,с. Новорождественское, ул. Советская, д. 62)': '725',
-#             'с.Песочнодубровка (Томская область, Кожевниковский район,с. Песочнодубровка, ул. Молодежная, д. 37)': '467',
-#             'с.Турунтаево (Томская область, Томский Район, Турунтаево Село, Новая Улица, д.2а)': '623',
-#             'Стрежевой (Томская область, г. Стрежевой, 4 мкрн., д. 405)': '347',
-#             'Асиновский (Томская область, г. Асино, ул. Им. Ленина, д. 70)': '545',
-#             'Верхнекетский (Томская область, р.п. Белый Яр, ул. Таежная, д. 9)': '635',
-#             'г.Кедровый (Томская область, г. Кедровый, 1 мкр., д.39/1)': '455',
-#             'д.Воронино (Томская область, Томский район,д. Воронино, ул. Центральная, д. 74)': '395',
-#             'д.Кисловка (Томская область, Томский район,д. Кисловка, ул. Мира, д. 12)': '491',
-#             'Дом предпринимателя (Томская область, Московский тракт, д12)': '371',
-#             'Колпашевский (Томская область, Колпашевский район, г. Колпашево, ул. Л.Толстого, д. 14)': '611',
-#             'Кривошеинский (Томская область, Кривошеинский район, с. Кривошеино, ул. Ленина, д. 29)': '593',
-#             'Молчановский (Томская область, Молчановский район, с. Молчаново, ул. Димитрова, д. 15)': '503',
-#             'п.Зональная (Томская область, Томский район,п. Зональная Станция, ул. Солнечная, д. 23)': '443',
-#             'п.Мирный (Томская область, Томский район,п. Мирный, ул. Трудовая, д. 2)': '401',
-#             'п.Победа (Томская область, Шегарский район,п. Победа, ул.Ленина, д. 68)': '629',
-#             'п.Рассвет (Томская область, Томский район,п.Рассвет, д. 11)': '539',
-#             'Парабель (Томская обл, Парабельский р-н, село Парабель, ул Советская, д 102а)': '2894026',
-#             'Первомайский (Томская область, Первомайский район,с. Первомайское, ул. Степная, д. 26)': '719',
-#             'с.Анастасьевка (Томская область, Шегарский район,с. Анастасьевка, пер. Школьный, д. 2)': '659',
-#             'с.Баткат (Томская область, Шегарский район,с. Баткат, пер.Кооперативный, д. 1)': '515',
-#             'с.Богашево (Томская область, Томский район,с. Богашево, ул. Новостройка, д. 20 а; ул.Советская, д. 6)': '575',
-#             'с.Вершинино (Томская область, Томский район,с. Вершинино, пер.Новый, д. 2)': '437',
-#             'с.Володино (Томская область, Кривошеинский район,с. Володино, ул. Советская, 31)': '647',
-#             'с.Вороново (Томская область, Кожевниковский район,с. Вороново, ул.Уткина, д. 17)': '707',
-#             'с.Зоркальцево (Томская область, Томский район,с. Зоркальцево, ул. Совхозная, д. 14)': '479',
-#             'с.Итатка (Томская область, Томский район,с. Итатка, ул. Гагарина, д. 1)': '383',
-#             'с.Калтай (Томская область, Томский район,с. Калтай, ул. Ленина, д. 72)': '329',
-#             'с.Корнилово (Томская область, Томский район,с. Корнилово, ул. Гагарина, д. 29а)': '419',
-#             'с.Красный Яр (Томская область, Кривошеинский район,с. Красный Яр, ул. Советская, д. 60)': '563',
-#             'с.Малиновка(Кожевниковский) (Томская область, Кожевниковский район,с. Малиновка, ул.Школьная, д. 13)': '713',
-#             'с.Малиновка (Томская область, Томский район,с. Малиновка, ул. Чулымская, д. 30)': '599',
-#             'с.Межениновка (Томская область, Томский район,с. Межениновка, ул. Первомайская, д. 23)': '731',
-#             'с.Могочино (Томская область, Молчановский район,с. Могочино, ул. Заводская, д. 3)': '335',
-#             'с.Монастырка (Томская область, Шегарский район,с. Монастырка, ул.Советская, д. 51 а)': '617',
-#             'с.Моряковский (Томская область, Томский район сельское поселение Моряковское, с.Моряковский Затон, ул. Советская, д. 27)': '551',
-#             'с.Нарга (Томская область, Молчановский район,с. Нарга, ул. К. Маркса, д. 41)': '497',
-#             'с.Новопокровка (Томская область, Кожевниковский район,с. Новопокровка, ул. Садовая, д. 2а)': '407',
-#             'с.Новорождественское (Томская область, Томский район,с. Новорождественское, ул. Советская, д. 62)': '725',
-#             'с.Новоселово (Томская область, Колпашевский район,с. Новоселово, ул. Центральная, д. 11/1)': '413',
-#             'с.Октябрьское (Томская обл., Томский р-н., с. Октябрьское, ул. Заводская, д. 7/2 (Библиотека))': '527',
-#             'с.Песочнодубровка (Томская область, Кожевниковский район,с. Песочнодубровка, ул. Молодежная, д. 37)': '467',
-#             'с.Рыбалово (Томская область, Томский район,с. Рыбалово, ул. Коммунистическая, д. 9)': '521',
-#             'с.Старая Ювала (Томская область, Кожевниковский район,с. Старая Ювала, ул. Ульяновская,д. д. 3а)': '653',
-#             'с.Трубачево (Томская область, Шегарский район,с. Трубачево, ул.Центральная, д. 7)': '671',
-#             'с.Тунгусово (Томская область, Молчановский район,с. Тунгусово, ул. У. Кнакиса, д. 5)': '473',
-#             'с.Турунтаево (Томская область, Томский Район, Турунтаево Село, Новая Улица, д.2а)': '623',
-#             'с.Уртам (Томская область, Кожевниковский район,с. Уртам, ул. Фрунзе, д. 33)': '569',
-#             'с.Чажемто (Томская область,Колпашевский район,с. Чажемто, ул. Ленина, д. 24)': '485',
-#             'с.Чилино (Томская область, Кожевниковский район,с. Чилино, ул. Кустарная, д. 1)': '359',
-#             'Стрежевой (Томская область, г. Стрежевой, 4 мкрн., д. 405)': '347',
-#             'АО «Газпромбанк» (Томская область, Томск Город, 1905 года Переулок, д7)': '342595',
-#             'Советский (г. Томск, ул. Тверская, д. 74)': '689',
-#             'ПАО «Промсвязьбанк» (г. Томск, пр. Ленина, д.82Б)': '683',
-#             'ПАО Банк «Левобережный» (г. Томск, пер. Совпартшкольный, д.13)': '449',
-#             'ПАО Банк «ФК Открытие» (г. Томск, ул. Набережная реки Ушайки, д16)': '677',
-#             'с. Сергеево (Томская область, Первомайский Район, Сергеево Село, Школьная Улица)': '432256',
-#             'Тегульдетский (Томская область, Тегульдетский район, с. Тегульдет, ул. Ленина, д. 97)': '365',
-#             'Чаинский (Томская область, Чаинский район, с. Подгорное, ул. Лесная, д. 36)': '695',
-#             'Шегарский (Томская область, Шегарский район, с. Мельниково, ул. Московская, д. 17)': '701',
-#             'ОЭЗ ТВТ (Томская область, Томск город, Развития проспект, д3)': '509'
-#         }
-
-# MFC_MAPPING = {
-#             '533': 'Кировский',
-#             '461': 'Ленинский',
-#             '641': 'Октябрьский',
-#             '689': 'Советский',
-#             '425': 'Александровский',
-#             '371': 'Дом предпринимателя',
-#             '431': 'ЗАТО Северск',
-#             '665': 'Зырянский',
-#             '377': 'Кожевниковский',
-#             '557': 'ПАО «Банк Уралсиб»',
-#             '389': 'ПАО «Томскпромстройбанк»',
-#             '449': 'ПАО Банк «Левобережный»',
-#             '677': 'ПАО Банк «ФК Открытие»',
-#             '605': 'п.Большая Саровка',
-#             '443': 'п.Зональная',
-#             '719': 'Первомайский',
-#             '659': 'с.Анастасьевка',
-#             '479': 'с.Зоркальцево',
-#             '713': 'с.Малиновка(Кожевниковский)',
-#             '731': 'с.Межениновка',
-#             '551': 'с.Моряковский',
-#             '407': 'с.Новопокровка',
-#             '725': 'с.Новорождественское',
-#             '467': 'с.Песочнодубровка',
-#             '623': 'с.Турунтаево',
-#             '347': 'Стрежевой',
-#             '545': 'Асиновский',
-#             '635': 'Верхнекетский',
-#             '455': 'г.Кедровый',
-#             '395': 'д.Воронино',
-#             '491': 'д.Кисловка',
-#             '371': 'Дом предпринимателя',
-#             '611': 'Колпашевский',
-#             '593': 'Кривошеинский',
-#             '503': 'Молчановский',
-#             '443': 'п.Зональная',
-#             '401': 'п.Мирный',
-#             '629': 'п.Победа',
-#             '539': 'п.Рассвет',
-#             '2894026': 'Парабель',
-#             '719': 'Первомайский',
-#             '659': 'с.Анастасьевка',
-#             '515': 'с.Баткат',
-#             '575': 'с.Богашево',
-#             '437': 'с.Вершинино',
-#             '647': 'с.Володино',
-#             '707': 'с.Вороново',
-#             '479': 'с.Зоркальцево',
-#             '383': 'с.Итатка',
-#             '329': 'с.Калтай',
-#             '419': 'с.Корнилово',
-#             '563': 'с.Красный Яр',
-#             '713': 'с.Малиновка(Кожевниковский)',
-#             '599': 'с.Малиновка',
-#             '731': 'с.Межениновка',
-#             '335': 'с.Могочино',
-#             '617': 'с.Монастырка',
-#             '551': 'с.Моряковский',
-#             '497': 'с.Нарга',
-#             '407': 'с.Новопокровка',
-#             '725': 'с.Новорождественское',
-#             '413': 'с.Новоселово',
-#             '527': 'с.Октябрьское',
-#             '467': 'с.Песочнодубровка',
-#             '521': 'с.Рыбалово',
-#             '653': 'с.Старая Ювала',
-#             '671': 'с.Трубачево',
-#             '473': 'с.Тунгусово',
-#             '623': 'с.Турунтаево',
-#             '569': 'с.Уртам',
-#             '485': 'с.Чажемто',
-#             '359': 'с.Чилино',
-#             '347': 'Стрежевой',
-#             '342595': 'АО «Газпромбанк»',
-#             '689': 'Советский',
-#             '683': 'ПАО «Промсвязьбанк»',
-#             '449': 'ПАО Банк «Левобережный»',
-#             '677': 'ПАО Банк «ФК Открытие»',
-#             '432256': 'с. Сергеево',
-#             '365': 'Тегульдетский',
-#             '695': 'Чаинский',
-#             '701': 'Шегарский',
-#             '509': 'ОЭЗ ТВТ'
-#         }
-
-# filials_1 = {
-#             'Кировский': '533',
-#             'Ленинский': '461',
-#             'Октябрьский': '641',
-#             'Советский': '689',
-#             'Александровский': '425',
-#             'Дом предпринимателя': '371',
-#             'ЗАТО Северск': '431',
-#             'Зырянский': '665',
-#             'Кожевниковский': '377',
-#             'ПАО «Банк Уралсиб»': '557',
-#             'ПАО «Томскпромстройбанк»': '389',
-#             'ПАО Банк «Левобережный»': '449',
-#             'ПАО Банк «ФК Открытие»': '677',
-#             'п.Большая Саровка': '605',
-#             'п.Зональная': '443',
-#             'Первомайский': '719',
-#             'с.Анастасьевка': '659',
-#             'с.Зоркальцево': '479',
-#             'с.Малиновка(Кожевниковский)': '713',
-#             'с.Межениновка': '731',
-#             'с.Моряковский': '551',
-#             'с.Новопокровка': '407',
-#             'с.Новорождественское': '725',
-#             'с.Песочнодубровка': '467',
-#             'с.Турунтаево': '623',
-#             'Стрежевой': '347',
-#             'Асиновский': '545',
-#             'Верхнекетский': '635',
-#             'г.Кедровый': '455',
-#             'д.Воронино': '395',
-#             'д.Кисловка': '491',
-#             'Дом предпринимателя': '371',
-#             'Колпашевский': '611',
-#             'Кривошеинский': '593',
-#             'Молчановский': '503',
-#             'п.Зональная': '443',
-#             'п.Мирный': '401',
-#             'п.Победа': '629',
-#             'п.Рассвет': '539',
-#             'Парабель': '2894026',
-#             'Первомайский': '719',
-#             'с.Анастасьевка': '659',
-#             'с.Баткат': '515',
-#             'с.Богашево': '575',
-#             'с.Вершинино': '437',
-#             'с.Володино': '647',
-#             'с.Вороново': '707',
-#             'с.Зоркальцево': '479',
-#             'с.Итатка': '383',
-#             'с.Калтай': '329',
-#             'с.Корнилово': '419',
-#             'с.Красный Яр': '563',
-#             'с.Малиновка(Кожевниковский)': '713',
-#             'с.Малиновка': '599',
-#             'с.Межениновка': '731',
-#             'с.Могочино': '335',
-#             'с.Монастырка': '617',
-#             'с.Моряковский': '551',
-#             'с.Нарга': '497',
-#             'с.Новопокровка': '407',
-#             'с.Новорождественское': '725',
-#             'с.Новоселово': '413',
-#             'с.Октябрьское': '527',
-#             'с.Песочнодубровка': '467',
-#             'с.Рыбалово': '521',
-#             'с.Старая Ювала': '653',
-#             'с.Трубачево': '671',
-#             'с.Тунгусово': '473',
-#             'с.Турунтаево': '623',
-#             'с.Уртам': '569',
-#             'с.Чажемто': '485',
-#             'с.Чилино': '359',
-#             'Стрежевой': '347',
-#             'АО «Газпромбанк»': '342595',
-#             'Советский': '689',
-#             'ПАО «Промсвязьбанк»': '683',
-#             'ПАО Банк «Левобережный»': '449',
-#             'ПАО Банк «ФК Открытие»': '677',
-#             'с. Сергеево': '432256',
-#             'Тегульдетский': '365',
-#             'Чаинский': '695',
-#             'Шегарский': '701',
-#             'ОЭЗ ТВТ': '509'
-#         }
-
 services = {
             'Загранпаспорт (10 лет)': '3a276fae-0959-44a5-a6eb-f87a0b5650b4',
             'ИНН, СНИЛС, ОМС': '976eb69d-83cb-42b9-893a-926e11956393',
@@ -494,14 +236,14 @@ class base:
                 "Зырянский": "Томская область, Зырянский район, Зырянское село, Советская улица, д.46А",
                 "Кировский": "г. Томск, пр-т Фрунзе, д.103д",
                 "Кожевниковский": "Томская область, Кожевниковский район, село Кожевниково, улица Парковая, дом 1, строение 3",
-                "Отдел по Кожевниковскому району": "Томская область, Кожевниковский район, село Кожевниково, улица Парковая, дом 1, строение 3",
+
                 "Колпашевский": "Томская область, Колп+ашевский район, город Колп+ашево, улица Льва Толст+ого, дом 14.",
                 "Кривошеинский": "Томская область, Кривошеинский район, с. Кривошеино, ул. Ленина, д. 29",
                 "Ленинский": "г. Томск, пер. Дербышевский, д. 26 Б",
-                "Отдел по Ленинскому району г. Томска": "г. Томск, пер. Дербышевский, д. 26 Б",
+
                 "Молчановский": "Томская область, Молчановский район, с. Молчаново, ул. Димитрова, д. 15",
                 "Октябрьский": "г. Томск, ул. Пушкина, д. 63, стр. 5",
-                "Отдел по Октябрьскому району г. Томска": "г. Томск, ул. Пушкина, д. 63, стр. 5",
+
                 "ОЭЗ ТВТ": "Томская область, Томск город, Развития проспект, д3",
                 "п.Большая Саровка": "Томская область, Колпашевский район,п. Большая Саровка, ул. Советская, д. 35/2",
                 "п.Зональная": "Томская область, Томский район,п. Зональная Станция, ул. Солнечная, д. 23",
@@ -711,12 +453,12 @@ class base:
                 "Отдел по ЗАТО Северск": "431",
                 "Отдел по Зырянскому району": "665",
                 "Отдел по Кировскому району г. Томска": "533",
-                "Отдел по Кожевниковскому району": "377",
+
                 "Отдел по Колпашевскому району": "611",
                 "Отдел по Кривошеинскому району": "593",
-                "Отдел по Ленинскому району г. Томска": "461",
+
                 "Отдел по Молчановскому району": "503",
-                "Отдел по Октябрьскому району г. Томска": "641",
+
                 "Отдел по Парабельскому району": "2894026",
                 "Отдел по Первомайскому району": "719",
                 "Отдел по Тегульдетскому районутдел по Советскому району г. Томска": "365",
@@ -800,19 +542,6 @@ class base:
             response = requests.get(status_url, timeout=(2, 5))
             response.encoding = 'utf-8'
             xstatus = response.json()
-
-            # if xstatus["requesters"][0]["lastName"] != None:
-            #     fam = xstatus["requesters"][0]["lastName"].replace(' ', '')
-            # else:
-            #     fam = ''
-            # if xstatus["requesters"][0]["firstName"] != None:
-            #     name = xstatus["requesters"][0]["firstName"].replace(' ', '')
-            # else:
-            #     name = ''
-            # if xstatus["requesters"][0]["patronymic"] != None:
-            #     otch = xstatus["requesters"][0]["patronymic"].replace(' ', '')
-            # else:
-            #     otch = ''
 
             fam = ''
             name = ''
@@ -978,24 +707,6 @@ class base:
                 dates.append(results[i][0])
 
             await db.close()
-
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     connect_timeout=2
-            # )
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-
-            #         sql_check = f"SELECT date FROM calendar WHERE location = '{location}'"
-            #         await cursor.execute(sql_check)
-            #         result = await cursor.fetchall()
-
-            # dates = []
-            # for i in range(len(result)):
-            #     dates.append(result[i][0])
 
             return dates
         except Exception as e:
@@ -1193,39 +904,22 @@ class base:
                     "phone": self.tel,
                     "visitTime": time,
                     "dateTime": date,
-                    # 'department': await get_key_by_value(filials, filial),
                     'department': response_res["data"]["department"],
                     'address': response_res["data"]["address"],
                     'pin_code': response_res["data"]["pin_code"]
                 }
-
-                date_ = str(datetime.datetime.now().date())
-                time_ = str(datetime.datetime.now().time())[:-7]
-                # time_obj = datetime.datetime.strptime(time_, "%H:%M:%S")
-                # new_time_obj = time_obj + datetime.timedelta(hours=7)
-                # time_ = new_time_obj.strftime("%H:%M:%S")
 
                 await db.insert('vkontakte_reg',
                                 sender=f'{self.user_id}',
                                 talon=f'{res['number']}',
                                 time=f'{time}',
                                 date=f'{date}',
-                                # department=f'{await get_key_by_value(filials_1, filial)}',
                                 department=f'{res['department']}',
                                 service=f'{await get_key_by_value(services, usluga)}',
                                 uuid=f'{response_res["data"]["uuid"]}',
                                 tel=f'{self.tel}',
                                 fio=f'{fio}',
                                 service_id=f'{usluga}')
-
-                # await db.insert('registration',
-                #                 fio=f'{fio}',
-                #                 tel=f'{self.tel}',
-                #                 talon=f'{res['number']}',
-                #                 department=f'{await get_key_by_value(filials, filial)}',
-                #                 date=f'{date_}',
-                #                 time=f'{time_}',
-                #                 platform='VK')
 
                 print(response_res["data"])
 
@@ -1246,19 +940,6 @@ class base:
                 # Получаем данные
                 await db.cursor.execute("SELECT restrictions FROM notification WHERE id_vk = %s LIMIT 1", (self.user_id,))
                 result = await db.cursor.fetchone()
-
-                # # Попытка безопасно прочитать список
-                # if result and result[0]:
-                #     try:
-                #         parsed = ast.literal_eval(result[0])
-                #         if isinstance(parsed, list):
-                #             current_restrictions = parsed
-                #         else:
-                #             current_restrictions = []
-                #     except Exception:
-                #         current_restrictions = []
-                # else:
-                #     current_restrictions = []
 
                 # Обработка пустого или некорректного JSON
                 if not (result and result[0]):
@@ -1281,54 +962,6 @@ class base:
                     (new_restrictions, self.user_id)
                 )
                 await db.connection.commit()
-
-                # # Обновление услуги в таблице notification
-                # await db.update('notification', f'id_vk = "{self.user_id}"', restrictions=f'{usluga}')
-                # await db.execute(
-                #     "UPDATE notification SET service = CAST(service AS INTEGER) + 1 WHERE id_vk = ?",
-                #     (self.user_id,)
-                # )
-
-                # pool = await aiomysql.create_pool(
-                #     host=host,
-                #     user=user,
-                #     password=password,
-                #     db=db,
-                #     autocommit=False,
-                #     connect_timeout=2
-                # )
-                # async with pool.acquire() as conn:
-                #     async with conn.cursor() as cursor:
-                #         await conn.begin()
-                #         await cursor.execute(
-                #             f"INSERT INTO vkontakte_reg (sender, talon, time, date, department, service, uuid, tel, fio) "
-                #             f"VALUES ('{self.user_id}', '{res['number']}', '{time}', '{date}', '{await get_key_by_value(filials_1, filial)}', '{await get_key_by_value(services, usluga)}', '{response_res["data"]["uuid"]}', '{self.tel}', '{fio}');"
-                #         )
-                #         await cursor.execute(
-                #             f"INSERT INTO registration (fio, tel, talon, department, date, time, platform) "
-                #             f"VALUES ('{fio}', '{self.tel}', '{res['number']}', '{await get_key_by_value(filials, filial)}', '{date_}', '{time_}', 'VK');"
-                #         )
-
-                #         # await cursor.execute(
-                #         #     f"UPDATE notification SET talon = CONCAT(COALESCE(talon, ''), '') WHERE id_vk = '{int(self.user_id)}'"
-                #         # )
-                #         # await cursor.execute(
-                #         #     f"UPDATE notification SET department = CONCAT(COALESCE(department, ''), '') WHERE id_vk = '{int(self.user_id)}'"
-                #         # )
-                #         # await cursor.execute(
-                #         #     f"UPDATE notification SET dates = CONCAT(COALESCE(dates, ''), '') WHERE id_vk = '{int(self.user_id)}'"
-                #         # )
-                #         # await cursor.execute(
-                #         #     f"UPDATE notification SET talon = CONCAT(talon, ', {res['number']}') WHERE id_vk = '{int(self.user_id)}'"
-                #         # )
-                #         # await cursor.execute(
-                #         #     f"UPDATE notification SET department = CONCAT(department, ', {await get_key_by_value(filials_1, filial)}') WHERE id_vk = '{int(self.user_id)}'"
-                #         # )
-                #         # await cursor.execute(
-                #         #     f"UPDATE notification SET dates = CONCAT(dates, ', {date}') WHERE id_vk = '{int(self.user_id)}'"
-                #         # )
-
-                #         await conn.commit()
 
             else:
                 res = {
@@ -1363,31 +996,6 @@ class base:
 
             await db.close()
 
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     autocommit=True,
-            #     connect_timeout=2
-            # )
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-            #         await cursor.execute(
-            #             f"SELECT ani FROM notification WHERE id_vk = '{self.user_id}'"
-            #         )
-            #         result = await cursor.fetchall()
-            #         await cursor.execute(
-            #             f"SELECT new_ani FROM notification WHERE id_vk = '{self.user_id}'"
-            #         )
-            #         result_1 = await cursor.fetchall()
-            #         if result:
-            #             # значениe ani существует
-            #             answer = True
-            #         else:
-            #             # значениe ani не существует
-            #             answer = False
-
             return answer, result, result_1
         except Exception as e:
             # Вывод подробной информации об ошибке
@@ -1417,31 +1025,6 @@ class base:
                 answer = False
 
             await db.close()
-
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     autocommit=True,
-            #     connect_timeout=2
-            # )
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-            #         try:
-            #             await cursor.execute(
-            #                 f"SELECT vk FROM agreement WHERE id_vk = '{self.user_id}'"
-            #             )
-            #             result = await cursor.fetchall()
-
-            #             if int(result[0][0]) or not int(result[0][0]):
-            #                 # значениe vk существует
-            #                 answer = True
-            #             else:
-            #                 # значениe vk не существует
-            #                 answer = False
-            #         except:
-            #             answer = False
 
             return answer, str(result[0][0]) if answer else '0'
         except Exception as e:
@@ -1479,42 +1062,6 @@ class base:
 
             await db.close()
 
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     autocommit=True,
-            #     connect_timeout=2
-            # )
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-
-            #         await cursor.execute(f"SELECT id_vk FROM notification WHERE ani = '{int(self.tel)}'")
-            #         result = await cursor.fetchall()
-
-            #         try:
-            #             if result[0][0] != '' and result[0][0] != None:
-            #                 res = False
-            #             else:
-            #                 res = True
-            #         except:
-            #             res = True
-
-            #         try:
-            #             await cursor.execute(
-            #                 f"INSERT INTO notification (ani, id_vk) "
-            #                 f"VALUES ('{int(self.tel)}', '{self.user_id}');"
-            #             )
-            #         except:
-            #             pass
-            #         try:
-            #             await cursor.execute(
-            #                 f"UPDATE notification SET id_vk = '{self.user_id}' WHERE ani = '{int(self.tel)}';"
-            #             )
-            #         except:
-            #             pass
-
             return res
         except Exception as e:
             # Вывод подробной информации об ошибке
@@ -1547,36 +1094,6 @@ class base:
 
             await db.close()
 
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     autocommit=True,
-            #     connect_timeout=2
-            # )
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-
-            #         if not args:
-            #             # Обновляем номер телефона пользователя
-            #             query = "UPDATE agreement SET tel = %s WHERE id_vk = %s"
-            #             await cursor.execute(query, (self.tel, self.user_id))
-            #         else:
-            #             # Проверяем, есть ли запись с таким номером телефона
-            #             check_query = "SELECT id_vk FROM agreement WHERE tel = %s"
-            #             await cursor.execute(check_query, (self.tel,))
-            #             existing_id = await cursor.fetchone()
-
-            #             if existing_id:
-            #                 # Если запись существует, обновляем её
-            #                 update_query = "UPDATE agreement SET id_vk = %s, vk = %s WHERE tel = %s"
-            #                 await cursor.execute(update_query, (self.user_id, args[0], self.tel))
-            #             else:
-            #                 # Если записи нет, создаем новую
-            #                 insert_query = "INSERT INTO agreement (id_vk, vk, tel) VALUES (%s, %s, %s)"
-            #                 await cursor.execute(insert_query, (self.user_id, args[0], self.tel))
-
             return
         except Exception as e:
             # Вывод подробной информации об ошибке
@@ -1595,10 +1112,6 @@ class base:
         await db.update('notification', f'ani = "{int(phone)}"', new_ani=f'{self.tel}', date=f'{date}')
 
         await db.close()
-
-        # await cursor.execute(
-        #     f"UPDATE notification SET new_ani = '{self.tel}', date = '{date}' WHERE ani = '{int(phone)}'"
-        # )
 
     async def phone_input_new(self):
         try:
@@ -1632,43 +1145,6 @@ class base:
 
             return False
 
-
-            # # Подключаемся к базе данных
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     autocommit=True,
-            #     connect_timeout=2
-            # )
-
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-            #         # Получаем текущие данные из таблицы notification
-            #         await cursor.execute(
-            #             f"SELECT date, ani, new_ani FROM notification WHERE id_vk = '{self.user_id}'"
-            #         )
-            #         result = await cursor.fetchone()
-
-            #         if result:
-            #             result_date, result_phone, result_phone_new = result
-
-            #             # Проверяем, если дата пуста (None или пустая строка)
-            #             if not result_date:
-            #                 await self.update_notification(cursor, result_phone, date)
-            #                 return True
-
-            #             # Сравниваем даты и обновляем данные при необходимости
-            #             result_date = datetime.datetime.strptime(result_date, "%Y-%m-%d").date()
-            #             if result_date != date:
-            #                 await self.update_notification(cursor, result_phone, date)
-            #                 return True
-            #             elif result_phone == self.tel or result_phone_new == self.tel:
-            #                 return True
-
-            #         return False
-
         except Exception as e:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
@@ -1693,22 +1169,6 @@ class base:
             await db.insert('count_vk', id=f'{self.user_id}', date=f'{date}', time=f'{time}', button=f'{word}')
 
             await db.close()
-
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     autocommit=True,
-            #     connect_timeout=2
-            # )
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-
-            #         await cursor.execute(
-            #             f"INSERT INTO count_vk (id, date, time, button) "
-            #             f"VALUES ('{self.user_id}', '{date}', '{time}', '{word}');"
-            #         )
 
             return
         except Exception as e:
@@ -1739,22 +1199,6 @@ class base:
 
             await db.close()
 
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     autocommit=True,
-            #     connect_timeout=2
-            # )
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-
-            #         await cursor.execute(
-            #             f"INSERT INTO ratings_reviews (number_statement, number_date, number_department, number_grade, number_waiting_time, number_time, number_employee, number_review, date_now) "
-            #             f"VALUES ('{(args,)[0][1]}', '{(args,)[0][2]}', '{(args,)[0][3]}', '{(args,)[0][4]}', '{(args,)[0][5]}', '{(args,)[0][6]}', '{(args,)[0][7]}', '{(args,)[0][8]}', '{(args,)[0][9]}');"
-            #         )
-
             return
         except Exception as e:
             # Вывод подробной информации об ошибке
@@ -1781,22 +1225,6 @@ class base:
 
             await db.close()
 
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     autocommit=True,
-            #     connect_timeout=2
-            # )
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-            #         # Предполагаем, что args - это кортеж: (fio, contacts, type_service, service)
-            #         await cursor.execute(
-            #             "INSERT INTO application (fio, contacts, type_service, service, date, category)"
-            #             "VALUES (%s, %s, %s, %s, %s, %s)",
-            #             ((args,)[0][0], (args,)[0][1], (args,)[0][2], (args,)[0][3], date, (args,)[0][4])
-            #         )
             return
         except Exception as e:
             # Вывод подробной информации об ошибке
@@ -1820,19 +1248,6 @@ class base:
                             sender=f'{self.user_id}')
 
             await db.close()
-
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     autocommit=True,
-            #     connect_timeout=2
-            # )
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-
-            #         await cursor.execute(f"INSERT INTO anniversary (text, date, sender) VALUES ('{text}', '{date}', '{self.user_id}');")
 
             return
         except Exception as e:
@@ -1874,50 +1289,6 @@ class base:
 
             await db.close()
 
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     autocommit=True,
-            #     connect_timeout=2
-            # )
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-
-            #         await cursor.execute("START TRANSACTION;")
-
-            #         sql = "SELECT ani FROM notification WHERE id_vk = %s"
-            #         val = (user_id,)
-            #         await cursor.execute(sql, val)
-
-            #         result = await cursor.fetchone()
-
-            #         if not result == []:
-            #             phone = result[0]
-            #         else:
-            #             phone = 'no_phone'
-
-            #         try:
-            #             await cursor.execute(
-            #                 "UPDATE file_id_tb SET marker = %s, phone = %s WHERE id_tb = %s;",
-            #                 ('yes', str(phone) + ', ' + str(mfc_id), int(user_id))
-            #             )
-            #         except Exception as e:
-            #             print('2', e)
-            #             pass
-
-            #         if message:
-            #             try:
-            #                 await cursor.execute(
-            #                     "INSERT INTO file_id_tb (id_tb, marker, message, phone) VALUES (%s, %s, %s, %s);",
-            #                     (int(user_id), 'yes', message, str(phone) + ', ' + str(mfc_id))
-            #                 )
-            #             except Exception as e:
-            #                 print('2', e)
-            #                 pass
-
-            #         await cursor.execute("COMMIT;")
             return
         except Exception as e:
             # Вывод подробной информации об ошибке
@@ -1966,36 +1337,6 @@ class base:
 
             await db.close()
 
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     autocommit=True,
-            #     connect_timeout=2
-            # )
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-
-            #         # # Выполняем SELECT запрос
-            #         # await cursor.execute(
-            #         #     f"SELECT * FROM notification WHERE id_vk = {self.user_id};"
-            #         # )
-            #         # # Получаем результаты запроса
-            #         # myresult = await cursor.fetchall()
-
-            #         # # Выполняем INSERT запрос with parameterized query
-            #         # await cursor.execute(
-            #         #     "INSERT INTO events (id_vk, id_tb, event, date) VALUES (%s, %s, %s, %s)",
-            #         #     (self.user_id, myresult[-1][2], event, date)
-            #         # )
-
-            #         # Выполняем INSERT запрос with parameterized query
-            #         await cursor.execute(
-            #             "INSERT INTO events (id_vk, event, date, platform) VALUES (%s, %s, %s, %s)",
-            #             (self.user_id, event, date, platform)
-            #         )
-
             return
         except Exception as e:
             # Вывод подробной информации об ошибке
@@ -2010,26 +1351,6 @@ class base:
         try:
 
             server = "http://172.18.11.104:8010"
-
-            # SERVICES = [
-            #     'Паспорт, прописка, ИНН, СНИЛС, ОМС',
-            #     'Субсидии, льготы, компенсации, пенсии',
-            #     'Предоставление сведений из ЕГРН',
-            #     'Прекращение, приостановка, приобщение документов по ранее принятому делу (недвижимость)',
-            #     'Справки УМВД и Пенсионного фонда (справки о несудимости, выписки ИЛС, справки о размере пенсии и другие)',
-            #     'Получение разрешений органов опеки г. Томск',
-            #     'Портал Госуслуги.ру'
-            # ]
-
-            # REPLACEMENT_SERVICES = [
-            #     'по оформлению личных документов гражданина',
-            #     'по оформлению Субсидии, льготы, компенсации, пенсии',
-            #     'по предоставлению сведений из ЕГРН',
-            #     'Приобщение, приостановка, прекращение',
-            #     'Справки УМВД, Пенсионного фонда и налоговой',
-            #     'Получение разрешений органов опеки города Томска',
-            #     'По регистрации на портале Госуслуг или в личном кабинете налогоплательщика'
-            # ]
 
             phone_dummy = (args,)[0][0]
             phone_dummy = phone_dummy.replace(' ', '')
@@ -2094,21 +1415,11 @@ class base:
                     time_cache = time_[i][2].rsplit('T')
                     time_[i] = str(time_[i][0]) + '-' + str(time_[i][1]) + '-' + str(time_cache[0])
                     time_cache = time_cache[1]
-                    # time_[i] = format_date(time_[i]) + ' в ' + time_cache.replace(':', ' часов ') + ' минут'
                     time_[i] = time_[i] + '\nВремя: ' + time_cache
-
-                # for i in range(len(SERVICES)):
-                #     for k in range(len(service_name)):
-                #         if service_name[k] == SERVICES[i]:
-                #             service_name[k] = service_name[k].replace(
-                #                 SERVICES[i], REPLACEMENT_SERVICES[i])
 
                 service_name_time = ''
                 for i in range(len(service_name)):
-                    # if len(talon_id) > 1 and i < len(talon_id) - 1:
-                    #     p = '\n'
-                    # else:
-                    #     p = ''
+
                     service_name_time += 'Талон: ' + talons['data'][i]['code']
                     service_name_time += "\nДата: " + time_[i] + '\nАдрес: ' + location_address[i]
                     service_name_time += "\nУслуга: " + service_name[i]
@@ -2159,38 +1470,15 @@ class base:
                 if talon["id"] == talon_id:
                     prms_1 = talon
 
-            # print(prms_1)
-
-            # prms_1 = {
-            #     "service_id": service_id,
-            #     "talon_id": talon_id,
-            #     "esiaid": esiaid,
-            #     "talon": talon,
-            #     "department": department,
-            #     "date": date,
-            #     "time": time,
-            #     "phone_dummy": phone_dummy,
-            #     "fio": fio
-            # }
-
             response = requests.post(server + "/rest/booking/" + talon_id + "/delete/" + esiaid, params=prms, timeout=(2, 5)).json()
             res = response['success']
-
-            # print(response)
 
             if res:
 
                 try:
 
-                    # time_new = str(datetime.datetime.now().time())[:-7]
-                    # time_obj = datetime.datetime.strptime(time_new, "%H:%M:%S")
-                    # new_time_obj = time_obj + datetime.timedelta(hours=7)
-                    # time_new = new_time_obj.strftime("%H:%M:%S")
-
                     db = Database(*SSR)
                     await db.connect()
-
-                    # await db.insert('forms', fio=f'{fio}', tel=f'{phone_dummy}', talon=f'{talon}', department=f'{department}', date=f'{date}', time=f'{time}', platform='VK')
 
                     try:
                         api = "http://172.18.11.104:8001/api/v1"
@@ -2212,19 +1500,6 @@ class base:
                     # Получаем данные
                     await db.cursor.execute("SELECT restrictions FROM notification WHERE id_vk = %s LIMIT 1", (self.user_id,))
                     result = await db.cursor.fetchone()
-
-                    # # Попытка безопасно прочитать список
-                    # if result and result[0]:
-                    #     try:
-                    #         parsed = ast.literal_eval(result[0])
-                    #         if isinstance(parsed, list):
-                    #             current_restrictions = parsed
-                    #         else:
-                    #             current_restrictions = []
-                    #     except Exception:
-                    #         current_restrictions = []
-                    # else:
-                    #     current_restrictions = []
 
                     # Обработка пустого или некорректного JSON
                     if not (result and result[0]):
@@ -2254,53 +1529,6 @@ class base:
                     await db.connection.commit()
 
                     await db.close()
-
-#                     pool = await aiomysql.create_pool(
-#                         host=host,
-#                         user=user,
-#                         password=password,
-#                         db=db,
-#                         autocommit=True,
-#                         connect_timeout=2
-#                     )
-#                     async with pool.acquire() as conn:
-#                         async with conn.cursor() as cursor:
-
-#                             await cursor.execute(
-#                                 f"INSERT INTO forms (fio, tel, talon, department, date, time, platform) VALUES ('{fio}', '{phone_dummy}', '{talon}', '{department}', '{date}', '{time_new}', 'VK');"
-#                             )
-
-#                             # """ПОД ВОПРОСОМ"""
-#                             # await cursor.execute(
-#                             #     f"DELETE FROM vkontakte_reg WHERE sender = '{self.user_id}' AND date = '{date}' AND talon = '{talon}' AND department = '{department}';"
-#                             # )
-
-#                             await cursor.execute(
-#                                 "DELETE FROM vkontakte_reg WHERE sender = %s AND date = %s AND talon = %s AND department = %s",
-#                                 (self.user_id, date, talon, department)
-# )
-#                             # await cursor.execute(
-#                             #     f"SELECT * FROM notification;"
-#                             # )
-#                             # result = await cursor.fetchall()
-
-#                             # for x in result:
-#                             #     id_vk = x[1]
-#                             #     id_tb = x[2]
-#                             #     if str(self.user_id) == id_vk:
-#                             #         await cursor.execute(
-#                             #             f"DELETE FROM telegram_reg WHERE ani = '{id_tb}' AND date = '{date}' AND talon = '{talon}' AND department = '{department}';"
-#                             #         )
-
-#                             await cursor.execute(
-#                                 """
-#                                 DELETE FROM telegram_reg
-#                                 WHERE ani IN (SELECT id_tb FROM notification WHERE id_vk = %s)
-#                                 AND date = %s
-#                                 AND talon = %s
-#                                 AND department = %s;
-#                                 """, (self.user_id, date, talon, department)
-#                             )
 
                 except Exception as e:
                     # Вывод подробной информации об ошибке
@@ -2334,21 +1562,6 @@ class base:
 
             await db.close()
 
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     autocommit=True,
-            #     connect_timeout=2
-            # )
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-
-            #         await cursor.execute(
-            #             f"SELECT * FROM vkontakte_reg WHERE sender = '{self.user_id}' AND date = '{str(date_formatted)}' AND now = 'yes'"
-            #         )
-            #         result = await cursor.fetchall()
             if not result == [] and result != ():
                 return result[0][0], result[0][1], result[0][2], result[0][3], result[0][4], result[0][5], result[0][6], result[0][7], result[0][8], result[0][9], result[0][10]
             return None
@@ -2375,20 +1588,6 @@ class base:
 
             await db.close()
 
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     autocommit=True,
-            #     connect_timeout=2
-            # )
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-
-            #         await cursor.execute(
-            #             f"DELETE FROM vkontakte_reg WHERE sender = '{str(self.user_id)}' AND date = '{str(date_formatted)}' AND talon = '{talon}' AND department = '{department}';"
-            #         )
             return
         except Exception as e:
             # Вывод подробной информации об ошибке
@@ -2419,33 +1618,6 @@ class base:
 
             await db.close()
 
-            # pool = await aiomysql.create_pool(
-            #     host=host,
-            #     user=user,
-            #     password=password,
-            #     db=db,
-            #     autocommit=True,
-            #     connect_timeout=2
-            # )
-            # async with pool.acquire() as conn:
-            #     async with conn.cursor() as cursor:
-            #         await conn.begin()
-
-            #         sql_check = f"SELECT ani FROM notification WHERE id_vk = %s"
-            #         await cursor.execute(sql_check, user_id)
-            #         result = await cursor.fetchone()
-
-            #         if not result == []:
-            #             phone = result[0]
-            #         else:
-            #             phone = 'no_phone'
-
-            #         await cursor.execute(
-            #             "INSERT INTO file_id_tb (id_tb, marker, message, phone) VALUES (%s, %s, %s, %s);",
-            #             (int(user_id), 'yes', message, str(phone) + ', ' + str(mfc_id))
-            #         )
-
-            #         await conn.commit()
             return
         except Exception as e:
             # Вывод подробной информации об ошибке
