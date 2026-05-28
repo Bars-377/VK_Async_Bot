@@ -1165,7 +1165,8 @@ class base:
                 "serviceId": usluga,
                 "caseCount": int(casecount),
                 "start": date + "T" + time,
-                "source": "ADMINISTRATOR_BOOKING" if filial == "342595" else "VOICE",
+                # "source": "ADMINISTRATOR_BOOKING" if filial == "342595" else "VOICE",
+                "source": "vk_bot",
                 "customer": {
                     "name": fio,
                     "phone": self.tel
