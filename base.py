@@ -8,33 +8,6 @@ import requests
 
 cache = {}
 
-services = {
-            'Загранпаспорт (10 лет)': '3a276fae-0959-44a5-a6eb-f87a0b5650b4',
-            'ИНН, СНИЛС, ОМС': '976eb69d-83cb-42b9-893a-926e11956393',
-            'Получение готовых документов': '5b0b693c-231e-4f40-8d64-c275c7d9217c',
-            'Регистрация и кадастровый учет недвижимости': '8f5e514e-dcce-41cf-8b56-38db6af10056',
-            'Предоставление сведений из ЕГРН': '77a009c9-f183-4ac6-9275-ae9ff7b7d4b9',
-            'Прекращение, приостановка, приобщение документов по ранее принятому делу (недвижимость)': '14ea190f-e597-4c68-a77a-a697d826101b',
-            'Опека (дача разрешения на сделки с недвижимостью для несовершеннолетних)': '99def219-6ee8-47e4-9508-b77b2042a332',
-            'Паспорт': '78402a5a-321b-4213-a081-a32a29c0317d',
-            'Прописка': 'd0ec6424-bfdf-492d-888b-76b9060726b4',
-            'Субсидии, льготы, компенсации, пенсии': 'c155b875-cd2c-4dc9-95a4-bd68ff0d4f1b',
-            'Справки УМВД и Пенсионного фонда (справки о несудимости, выписки ИЛС, справки о размере пенсии и другие)': '93e9047a-b55f-4d43-b10d-554f5bd3c080',
-            'Распоряжение средствами материнского капитала': 'dfa9a351-dc67-42da-b33c-e1fa5da95b90',
-            'Детские пособия, путёвки': '97d144a1-14ab-4381-ad05-5575c54e677d',
-            'Портал Госуслуги.ру': 'f94fd42b-611b-460a-8270-059526b40d35',
-            'Услуги для предпринимателей': '97ddcd3f-227b-4450-a62d-c7da82084020',
-            'Составление налоговой декларации': '0666b35c-0383-441e-a158-cc9bcafffef7',
-            'Составление договоров': '36340cfb-7864-4ced-81df-9845bd73cfe2',
-            '"Водительское удостоверение': '9fcfcb68-befb-42e5-ae3c-8b05f3dfe3c2',
-            'Банкротство физических лиц': 'fb6348b0-6b0c-4aa3-9deb-7385894beb39',
-            'Консультация специалиста Роспотребнадзора': '52cc58f4-2f75-46b2-8065-abe1c6ed6889',
-            'Онлайн консультация специалиста Росреестра': '81914e42-5ce6-477a-a49c-52299d37f8ca',
-            'Ежемесячная денежная выплата на ребенка в возрасте от 8 до 17 лет': 'c205f225-d3b0-4183-a424-d215317632ab',
-            'Выдача сертификатов на газификацию жилого помещения': 'ae063235-ef12-4166-922b-78e307060c5d',
-            'Онлайн консультация с нотариусом': '4b7b705a-8b12-4f07-b26f-d573e6f096c2'
-        }
-
 host="172.18.11.104"
 user="root"
 password="enigma1418"
@@ -885,12 +858,6 @@ class base:
                 "fields": fields
             }
 
-            async def get_key_by_value(dictionary, value):
-                for key, val in dictionary.items():
-                    if val == value:
-                        return key
-                return None
-
             server = "http://172.18.11.104:8010"
             async with aiohttp.ClientSession() as session:
                 async with session.post(server + "/rest/book", json=prms, timeout=10) as response:
@@ -906,7 +873,8 @@ class base:
                     "dateTime": date,
                     'department': response_res["data"]["department"],
                     'address': response_res["data"]["address"],
-                    'pin_code': response_res["data"]["pin_code"]
+                    'pin_code': response_res["data"]["pin_code"],
+                    'service': response_res["data"]["service"]
                 }
 
                 await db.insert('vkontakte_reg',
@@ -915,7 +883,7 @@ class base:
                                 time=f'{time}',
                                 date=f'{date}',
                                 department=f'{res['department']}',
-                                service=f'{await get_key_by_value(services, usluga)}',
+                                service=f'{res['service']}',
                                 uuid=f'{response_res["data"]["uuid"]}',
                                 tel=f'{self.tel}',
                                 fio=f'{fio}',
