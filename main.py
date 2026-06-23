@@ -1,12 +1,186 @@
+import os
+import certifi
+
+# !!! ЭТО ДОЛЖНО БЫТЬ В САМОМ НАЧАЛЕ ФАЙЛА !!!
+os.environ['SSL_CERT_FILE'] = certifi.where()
+os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
+
 from multiprocessing import Process
 from vkbottle import BaseStateGroup
 from vkbottle import Bot
 from vkbottle.bot import BotLabeler, Message
 from vkbottle import CtxStorage
-import os
+
 from pathlib import Path
 import mysql.connector
 import json
+
+from typing import Dict, Any
+import threading
+import aiohttp
+from aiohttp import web, ClientSession
+
+import asyncio
+from vkbottle import Keyboard, KeyboardButtonColor, Text
+
+
+import sys
+
+# Класс Store для хранения консультаций
+class Store:
+    def __init__(self):
+        self.consultations: Dict[str, Any] = {}
+        self._lock = asyncio.Lock()
+        self.cache_file = Path("cache/consultations")
+        self.cache_file.parent.mkdir(parents=True, exist_ok=True)
+
+    def _truncate(self, name: str, data: Any) -> Any:
+        """Обработка данных консультации"""
+        return data
+
+    def load_from_cache_sync(self):
+        """Синхронная загрузка консультаций из кэша"""
+        if self.cache_file.exists():
+            try:
+                with open(self.cache_file, 'r', encoding='utf-8') as f:
+                    self.consultations = json.load(f)
+                logger.info(f"Loaded consultations from cache: {len(self.consultations)} items")
+                return True
+            except Exception as e:
+                logger.error(f"Error loading cache: {e}")
+                return False
+        return False
+
+    async def load_from_cache(self):
+        """Асинхронная загрузка консультаций из кэша"""
+        if self.cache_file.exists():
+            try:
+                with open(self.cache_file, 'r', encoding='utf-8') as f:
+                    self.consultations = json.load(f)
+                logger.info(f"Loaded consultations from cache: {len(self.consultations)} items")
+                return True
+            except Exception as e:
+                logger.error(f"Error loading cache: {e}")
+                return False
+        return False
+
+    async def subscribe_to_consultations(self, session: ClientSession, *, endpoint: str):
+        """Подписка на получение консультаций"""
+        cache_file = self.cache_file
+        try:
+            url = f"{os.environ.get('INTERNAL_API_URL', 'http://172.18.11.104:8001')}/api/v1/shared/subscribe"
+
+            logger.info(f"Subscribing to: {url}")
+
+            async with session.post(
+                url,
+                json={
+                    "host": os.environ.get("SELF_HOST", "0.0.0.0"),
+                    "port": int(os.environ.get("SELF_PORT", "8000")),
+                    "path": endpoint,
+                    "requester": "max",
+                },
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                # Исправляем: проверяем статусы 200 и 201
+                if response.status in [200, 201]:
+                    consultations_data = await response.json()
+                    logger.info(f"Received {len(consultations_data)} consultations from API")
+
+                    consultations = {
+                        c["name"]: self._truncate(c["name"], c["data"])
+                        for c in consultations_data
+                    }
+                    # Сохраняем в кэш
+                    with open(cache_file, 'w', encoding='utf-8') as f:
+                        json.dump(consultations, f, ensure_ascii=False, indent=2)
+
+                    self.consultations = consultations
+                    logger.info(f"Subscribed to consultations: {len(consultations)} items")
+                    return consultations
+                else:
+                    error_text = await response.text()
+                    logger.error(f"Failed to subscribe: {response.status} - {error_text}")
+                    # Пытаемся загрузить из кэша
+                    if await self.load_from_cache():
+                        return self.consultations
+                    return None
+
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            logger.error(f"Failed to fetch consultations: %s", e)
+            if await self.load_from_cache():
+                logger.warning("Reading consultations from cache")
+                return self.consultations
+            else:
+                logger.critical("Failed to read consultations from cache")
+                return None
+
+# Глобальный экземпляр Store
+store = Store()
+
+# Функция для обработки обновлений
+def make_update_handler(store_instance: Store):
+    async def handle_update(request: web.Request) -> web.Response:
+        try:
+            data = await request.json()
+            logger.info(f"Received update with {len(data)} items")
+        except Exception as e:
+            logger.error(f"Invalid JSON in request: {e}")
+            return web.Response(status=400)
+
+        async with store_instance._lock:
+            # Обновляем данные
+            store_instance.consultations.update(data)
+            # Сохраняем в кэш
+            try:
+                with open(store_instance.cache_file, 'w', encoding='utf-8') as f:
+                    json.dump(store_instance.consultations, f, ensure_ascii=False, indent=2)
+                logger.info(f"Updated cache with {len(data)} items")
+            except Exception as e:
+                logger.error(f"Error saving cache: {e}")
+
+        return web.Response(status=200)
+    return handle_update
+
+# Функция для запуска веб-сервера обновлений в отдельном потоке
+def run_update_server_in_thread():
+    """Запуск веб-сервера для приема обновлений в отдельном потоке"""
+    endpoint = "/update"
+
+    app = web.Application()
+    app.router.add_post(endpoint, make_update_handler(store))
+
+    # Создаем новый event loop для этого потока
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    runner = web.AppRunner(app)
+    loop.run_until_complete(runner.setup())
+
+    port = int(os.environ.get("SELF_PORT", 8000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    loop.run_until_complete(site.start())
+
+    logger.info(f"Update server started on port {port}")
+
+    try:
+        loop.run_forever()
+    except KeyboardInterrupt:
+        logger.info("Shutting down update server...")
+    finally:
+        loop.run_until_complete(runner.cleanup())
+        loop.close()
+
+# Асинхронная функция для подписки на консультации
+async def subscribe_consultations_async():
+    """Асинхронная подписка на консультации"""
+    async with aiohttp.ClientSession() as session:
+        await store.subscribe_to_consultations(session, endpoint="/update")
+
+# Синхронная обертка для подписки
+def subscribe_consultations_sync():
+    """Синхронная подписка на консультации"""
+    asyncio.run(subscribe_consultations_async())
 
 with open('messages.json', 'r', encoding='utf-8') as file:
     loaded_data = json.load(file)
@@ -44,7 +218,6 @@ logging.getLogger("vkbottle").disabled = True
 # Настраиваем loguru, чтобы игнорировать логи
 logger.remove()  # Удаляем все существующие обработчики loguru
 
-import sys
 logger.add(sys.stdout, level="INFO")  # Добавляем обработчик для вывода в консоль
 
 host="172.18.11.104"
@@ -52,8 +225,7 @@ user="root"
 password="enigma1418"
 database="mdtomskbot"
 
-import asyncio
-from vkbottle import Keyboard, KeyboardButtonColor, Text
+
 
 def process_1():
 
@@ -80,6 +252,24 @@ def process_1():
     bot = Bot(token=config["VKONTAKTE"]["token"])
     # Проверяем после создания бота
     print("После Bot:", UserAuth.AUTH_URL)
+
+    # ====== ДОБАВЛЯЕМ ЗАГРУЗКУ КОНСУЛЬТАЦИЙ ======
+    # Загружаем консультации из кэша
+    store.load_from_cache_sync()
+    logger.info(f"Loaded consultations at startup: {len(store.consultations)} items")
+
+    # Запускаем подписку на обновления в отдельном потоке
+    def subscribe_in_background():
+        try:
+            subscribe_consultations_sync()
+        except Exception as e:
+            logger.error(f"Error in subscription: {e}")
+
+    # Запускаем подписку в фоновом потоке
+    subscription_thread = threading.Thread(target=subscribe_in_background, daemon=True)
+    subscription_thread.start()
+
+    # ====== КОНЕЦ ДОБАВЛЕННОГО КОДА ======
 
     filials_id_docs = ('533',
                 '461', '641', '689', '431', '443', '479',
@@ -849,23 +1039,135 @@ def process_1():
 
     async def cons_payload_data(message, photo=None, keyboard=None, file=None):
         url_schedule = 'http://172.18.11.104:8001/api/v1/filials/chart/'
+
+        # # ТЕСТ
+        # photo = "reg-uchet-snyatie"
+        # keyboard = None
+        # file = None
+
+        # ====== ПОЛУЧАЕМ КОНСУЛЬТАЦИЮ ПО ИНДЕКСУ ======
+        consultation_info = None
+        consultation_index = None
+
+        # Определяем, где передан индекс консультации
+        if photo:
+            consultation_index = photo
+        elif file:
+            consultation_index = file
+
+        # Если есть индекс, ищем консультацию в store
+        if consultation_index:
+            # Проверяем, есть ли такой ключ в store.consultations
+            if consultation_index in store.consultations:
+                consultation_info = store.consultations[consultation_index]
+                logger.info(f"Found consultation by index '{consultation_index}': {consultation_info}")
+            else:
+                # Пробуем найти по частичному совпадению
+                for key, value in store.consultations.items():
+                    if consultation_index in key or key in consultation_index:
+                        consultation_info = value
+                        logger.info(f"Found consultation by partial match: {key}")
+                        break
+
+        # Если нашли консультацию, получаем данные
+        cons_data = None
+        cons_message = None
+        cons_name = None
+
+        if consultation_info:
+            cons_data = consultation_info.get('data', {})
+            cons_message = cons_data.get('message', '')
+            cons_name = consultation_info.get('name', consultation_index)
+            logger.info(f"Consultation found: {cons_name} -> {cons_message[:50]}...")
+
+        # ====== ОБРАБОТКА В ЗАВИСИМОСТИ ОТ ПАРАМЕТРОВ ======
+
+        # СЛУЧАЙ 1: Есть и photo, и file (консультация передана в photo)
         if photo and file and not isinstance(photo, tuple):
             ph = await upload_photo_from_url(f"{url_schedule}/{photo}", message)
-            return await message.answer(f"{await read_file(file)}", keyboard=keyboard, attachment=ph)
+
+            # Если есть консультация, добавляем ее сообщение к файлу
+            if cons_message:
+                return await message.answer(
+                    f"{await read_file(file)}\n\n📋 {cons_message}",
+                    keyboard=keyboard,
+                    attachment=ph
+                )
+            return await message.answer(
+                f"{await read_file(file)}",
+                keyboard=keyboard,
+                attachment=ph
+            )
+
+        # СЛУЧАЙ 2: Только file (консультация передана в file)
         elif file and not photo:
-            return await message.answer(f"{await read_file(file)}", keyboard=keyboard)
+            print('POPAL 1')
+
+            # Если в file передан индекс консультации
+            if consultation_info and cons_message:
+                # Показываем сообщение консультации
+                return await message.answer(
+                    f"📋 {cons_message}",
+                    keyboard=keyboard
+                )
+            else:
+                # Иначе читаем файл
+                return await message.answer(
+                    f"{await read_file(file)}",
+                    keyboard=keyboard
+                )
+
+        # СЛУЧАЙ 3: photo - это кортеж (несколько фото)
         elif isinstance(photo, tuple):
+            # Отправляем все фото
             for i in range(len(photo)-1):
                 ph = await upload_photo_from_url(f"{url_schedule}/{photo[i]}", message)
                 await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+
             ph = await upload_photo_from_url(f"{url_schedule}/{photo[-1]}", message)
+
+            # Если есть консультация, добавляем ее сообщение
             if not file:
+                if cons_message:
+                    return await message.answer(
+                        f"📋 {cons_message}",
+                        keyboard=keyboard,
+                        attachment=ph
+                    )
                 return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
             else:
-                return await message.answer(f"{await read_file(file)}", keyboard=keyboard, attachment=ph)
+                if cons_message:
+                    return await message.answer(
+                        f"{await read_file(file)}\n\n📋 {cons_message}",
+                        keyboard=keyboard,
+                        attachment=ph
+                    )
+                return await message.answer(
+                    f"{await read_file(file)}",
+                    keyboard=keyboard,
+                    attachment=ph
+                )
+
+        # СЛУЧАЙ 4: Только photo (консультация передана в photo)
         elif photo and not file:
+            print('POPAL 2')
+
             ph = await upload_photo_from_url(f"{url_schedule}/{photo}", message)
-            return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+
+            # ====== В POPAL 2 ИСПОЛЬЗУЕМ КОНСУЛЬТАЦИЮ ======
+            if cons_message:
+                # Отправляем фото с сообщением консультации
+                return await message.answer(
+                    f"📋 {cons_message}",
+                    keyboard=keyboard,
+                    attachment=ph
+                )
+            else:
+                # Если консультация не найдена, показываем только фото
+                logger.warning(f"Consultation not found for index: {consultation_index}")
+                return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+
+        # СЛУЧАЙ 5: Нет параметров
         else:
             return await message.answer("Выберите раздел", keyboard=keyboard)
 
@@ -4613,6 +4915,9 @@ from mysql.connector import Error
 from aiohttp import ClientConnectorError  # Импортируем исключение для обработки ошибок соединения
 
 if __name__ == "__main__":
+    # Запускаем веб-сервер для обновлений в отдельном процессе
+    update_server_process = Process(target=run_update_server_in_thread)
+    update_server_process.start()
 
     process1 = Process(target=process_1)
     # process1.start()
@@ -4654,7 +4959,11 @@ if __name__ == "__main__":
 
     while True:
         try:
-            if not process1.is_alive():
+            if not update_server_process.is_alive():
+                update_server_process = Process(target=run_update_server_in_thread)
+                update_server_process.start()
+                # process1.join()
+            elif not process1.is_alive():
                 process1 = Process(target=process_1)
                 process1.start()
                 # process1.join()
@@ -4714,6 +5023,11 @@ if __name__ == "__main__":
                 else:
                     print(f"Ошибка MySQL: {e.errno} - {e.msg}")
 
+            print("Завершение процесса 0...")
+            update_server_process.terminate()  # Принудительное завершение процесса
+            update_server_process.join()  # Ждем завершения процесса
+            print("Процесс 0 был завершен.")
+
             print("Завершение процесса 1...")
             process1.terminate()  # Принудительное завершение процесса
             process1.join()  # Ждем завершения процесса
@@ -4771,6 +5085,11 @@ if __name__ == "__main__":
 
         except ConnectionAbortedError:
             print("Ошибка: Программа на вашем хост-компьютере разорвала установленное подключение")
+
+            print("Завершение процесса 0...")
+            update_server_process.terminate()  # Принудительное завершение процесса
+            update_server_process.join()  # Ждем завершения процесса
+            print("Процесс 0 был завершен.")
 
             print("Завершение процесса 1...")
             process1.terminate()  # Принудительное завершение процесса

@@ -2,7 +2,7 @@ services:
   vkbottle:
     build: .
     ports:
-      - "8000:8000"  # vkbottle
+      - "8000:8000" # vkbottle
     volumes:
       - .:/app
       - /etc/localtime:/etc/localtime:ro
@@ -12,4 +12,8 @@ services:
     command: >
       sh -c ". /venv/bin/activate && python main.py"
     restart: unless-stopped
-    mem_limit: 1g  # Ограничение памяти
+    mem_limit: 1g # Ограничение памяти
+
+networks:
+  internal-api-network:
+    external: true
