@@ -892,10 +892,10 @@ class buttons:
     async def tomsk_obl_2(cls, *args):
         try:
             keyboard = Keyboard(one_time=True, inline=False)
-            cls._add_button(keyboard, "Первомайский", {"cmd": "pervom"}, KeyboardButtonColor.POSITIVE)
+            cls._add_button(keyboard, "Первомайский", {"cmd": "pervomayskiy"}, KeyboardButtonColor.POSITIVE)
             cls._add_button(keyboard, "Кожевниковский", {"cmd": "kojev_rayon"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
-            cls._add_button(keyboard, "Кривошеинский", {"cmd": "krivosh_rayon"}, KeyboardButtonColor.POSITIVE)
+            cls._add_button(keyboard, "Кривошеинский", {"cmd": "krivosheinskiy"}, KeyboardButtonColor.POSITIVE)
             cls._add_button(keyboard, "Колпашевский", {"cmd": "kolp_rayon"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
             cls._add_button(keyboard, "Молчановский", {"cmd": "molch_rayon"}, KeyboardButtonColor.POSITIVE)

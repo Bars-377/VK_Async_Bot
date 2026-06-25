@@ -1333,9 +1333,9 @@ def process_1():
                         'func': cons_payload_data,
                         'args': {'message': message, 'keyboard': await buttons.tomsk_obl_2()}
                     },
-                    'krivosh_rayon': {
+                    'krivosheinskiy': {
                         'func': cons_payload_data,
-                        'args': {'keyboard': await buttons.krivosh_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'kriv' / 'krivosheino.txt', 'keyboard': await buttons.krivosh_rayon()}
                     },
                     'kolp_rayon': {
                         'func': cons_payload_data,
@@ -2277,7 +2277,7 @@ def process_1():
                 'pervom_rayon': buttons.pervom_rayon,
                 'molch_rayon': buttons.molch_rayon,
                 'kolp_rayon': buttons.kolp_rayon,
-                'krivosh_rayon': buttons.krivosh_rayon,
+                'krivosheinskiy': buttons.krivosh_rayon,
                 'kojev_rayon': buttons.kojev_rayon,
                 'tomsk_rayon': buttons.tomsk_rayon,
                 'tomsk_rayon_1': buttons.tomsk_rayon_1,
@@ -2555,7 +2555,7 @@ def process_1():
                 'pervom_rayon': buttons.pervom_rayon,
                 'molch_rayon': buttons.molch_rayon,
                 'kolp_rayon': buttons.kolp_rayon,
-                'krivosh_rayon': buttons.krivosh_rayon,
+                'krivosheinskiy': buttons.krivosh_rayon,
                 'kojev_rayon': buttons.kojev_rayon,
                 'tomsk_rayon': buttons.tomsk_rayon,
                 'tomsk_rayon_1': buttons.tomsk_rayon_1,
@@ -3381,11 +3381,6 @@ def process_1():
                 ctx.set(f'{user_id}: field_1', payload_data)
                 keyboard = await buttons.menu_menu()
                 return await message.answer("Кратко изложите суть обращения", keyboard=keyboard)
-            # elif service_id in ('976eb69d-83cb-42b9-893a-926e11956393', 'f94fd42b-611b-460a-8270-059526b40d35') and field_1 == 'None':
-            #     ctx.set(f'{user_id}: field_1', payload_data)
-            #     keyboard = await buttons.yes_no()
-            #     print('POPAL')
-            #     return await message.answer("Обращается иностранный гражданин?", keyboard=keyboard)
             elif service_id == '81914e42-5ce6-477a-a49c-52299d37f8ca' and field_1 == 'None':
                 ctx.set(f'{user_id}: field_1', payload_data)
                 keyboard = await buttons.menu_menu()
