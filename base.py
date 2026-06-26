@@ -13,6 +13,17 @@ user="root"
 password="enigma1418"
 db="mdtomskbot"
 
+"""СЮДА ЗАНОСИТЬ ПАРАМЕТРЫ ТИПА TEXT ДЛЯ КЕША"""
+list_based_questions = ('aa50aae2-8879-4945-9553-825e911fc9c4',
+                        'b1a8f2ae-3a16-4018-ad69-0a843e61796c',
+                        'b1a8f2ae-3a16-4018-ad69-0a843e61796c',
+                        'b1a8f2ae-3a16-4018-ad69-0a843e61796c',
+                        'b1a8f2ae-3a16-4018-ad69-0a843e61796c',
+                        'b1a8f2ae-3a16-4018-ad69-0a843e61796c',
+                        'b1a8f2ae-3a16-4018-ad69-0a843e61796c',
+                        'b1a8f2ae-3a16-4018-ad69-0a843e61796c',
+                        )
+
 SSR = (host, user, password, db)
 
 class Database:
@@ -638,21 +649,25 @@ class base:
         return str(data)
 
     async def delete_in_cache(*args):
+        """СЮДА ЗАНОСИТЬ ПАРАМЕТРЫ ТИПА TEXT"""
         global cache
         key = (*args,)
 
         h = key[-1]
 
-        h = await base.caches_processing('aa50aae2-8879-4945-9553-825e911fc9c4', h)
-        h = await base.caches_processing('b1a8f2ae-3a16-4018-ad69-0a843e61796c', h)
-        h = await base.caches_processing('667a73c2-e026-483d-8033-1caadcea8f99', h)
-        h = await base.caches_processing('fbc884bf-b18b-4591-8f4d-fd229b9dc11d', h)
-        h = await base.caches_processing('48b24708-ad36-4aa7-9772-17940e7741c8', h)
-        h = await base.caches_processing('cf535155-7337-4310-84d5-3e6e720bf36e', h)
-        h = await base.caches_processing('56ed2b59-2293-42c7-8493-46d30cfebdf6', h)
-        h = await base.caches_processing('4b2ab9f4-f1b2-4b41-8e1b-fd719bd797b3', h)
-        h = await base.caches_processing('64be467d-5881-416e-be81-fc697334b6e4', h)
-        h = await base.caches_processing('541f0b86-f354-40ae-b2cc-71b091929e31', h)
+        for text in list_based_questions:
+            h = await base.caches_processing(text, h)
+
+        # h = await base.caches_processing('aa50aae2-8879-4945-9553-825e911fc9c4', h)
+        # h = await base.caches_processing('b1a8f2ae-3a16-4018-ad69-0a843e61796c', h)
+        # h = await base.caches_processing('667a73c2-e026-483d-8033-1caadcea8f99', h)
+        # h = await base.caches_processing('fbc884bf-b18b-4591-8f4d-fd229b9dc11d', h)
+        # h = await base.caches_processing('48b24708-ad36-4aa7-9772-17940e7741c8', h)
+        # h = await base.caches_processing('cf535155-7337-4310-84d5-3e6e720bf36e', h)
+        # h = await base.caches_processing('56ed2b59-2293-42c7-8493-46d30cfebdf6', h)
+        # h = await base.caches_processing('4b2ab9f4-f1b2-4b41-8e1b-fd719bd797b3', h)
+        # h = await base.caches_processing('64be467d-5881-416e-be81-fc697334b6e4', h)
+        # h = await base.caches_processing('541f0b86-f354-40ae-b2cc-71b091929e31', h)
 
         fields = h
         key_1 = ('None', 'None', key[2], key[3], fields)
@@ -755,16 +770,19 @@ class base:
 
                     h = key[-1]
 
-                    h = await base.caches_processing('aa50aae2-8879-4945-9553-825e911fc9c4', h)
-                    h = await base.caches_processing('b1a8f2ae-3a16-4018-ad69-0a843e61796c', h)
-                    h = await base.caches_processing('667a73c2-e026-483d-8033-1caadcea8f99', h)
-                    h = await base.caches_processing('fbc884bf-b18b-4591-8f4d-fd229b9dc11d', h)
-                    h = await base.caches_processing('48b24708-ad36-4aa7-9772-17940e7741c8', h)
-                    h = await base.caches_processing('cf535155-7337-4310-84d5-3e6e720bf36e', h)
-                    h = await base.caches_processing('56ed2b59-2293-42c7-8493-46d30cfebdf6', h)
-                    h = await base.caches_processing('4b2ab9f4-f1b2-4b41-8e1b-fd719bd797b3', h)
-                    h = await base.caches_processing('64be467d-5881-416e-be81-fc697334b6e4', h)
-                    h = await base.caches_processing('541f0b86-f354-40ae-b2cc-71b091929e31', h)
+                    for text in list_based_questions:
+                        h = await base.caches_processing(text, h)
+
+                    # h = await base.caches_processing('aa50aae2-8879-4945-9553-825e911fc9c4', h)
+                    # h = await base.caches_processing('b1a8f2ae-3a16-4018-ad69-0a843e61796c', h)
+                    # h = await base.caches_processing('667a73c2-e026-483d-8033-1caadcea8f99', h)
+                    # h = await base.caches_processing('fbc884bf-b18b-4591-8f4d-fd229b9dc11d', h)
+                    # h = await base.caches_processing('48b24708-ad36-4aa7-9772-17940e7741c8', h)
+                    # h = await base.caches_processing('cf535155-7337-4310-84d5-3e6e720bf36e', h)
+                    # h = await base.caches_processing('56ed2b59-2293-42c7-8493-46d30cfebdf6', h)
+                    # h = await base.caches_processing('4b2ab9f4-f1b2-4b41-8e1b-fd719bd797b3', h)
+                    # h = await base.caches_processing('64be467d-5881-416e-be81-fc697334b6e4', h)
+                    # h = await base.caches_processing('541f0b86-f354-40ae-b2cc-71b091929e31', h)
 
                     fields = h
 

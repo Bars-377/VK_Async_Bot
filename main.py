@@ -3355,64 +3355,84 @@ def process_1():
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['40'], keyboard=keyboard)
 
-            if service_id == '52cc58f4-2f75-46b2-8065-abe1c6ed6889' and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
-                keyboard = await buttons.menu_menu()
-                return await message.answer("Кратко изложите суть обращения", keyboard=keyboard)
+            # print('POPAL', payload_data)
 
-            elif service_id == '4b7b705a-8b12-4f07-b26f-d573e6f096c2' and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
-                keyboard = await buttons.menu_menu()
-                return await message.answer("Напишите суть обращения", keyboard=keyboard)
-
-            elif service_id == '78402a5a-321b-4213-a081-a32a29c0317d' and ctx.get(f'{user_id}: service_name') == 'passport' and field_1 == 'None':
+            if service_id == 'f63c0794-48d5-4013-aaed-7c6d9d3a9d53' and field_1 == 'None':
                 ctx.set(f'{user_id}: field_1', payload_data)
                 keyboard = await buttons.yes_no()
-                return await message.answer("Необходимо сделать фотографии?", keyboard=keyboard)
-            elif service_id == '976eb69d-83cb-42b9-893a-926e11956393' and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
-                keyboard = await buttons.yes_no()
-                return await message.answer(loaded_data['72'], keyboard=keyboard)
-            elif service_id == '5e90fc3f-f0f6-4348-a30a-18b0b0851627' and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
-                keyboard = await buttons.yes_no()
-                return await message.answer(loaded_data['73'], keyboard=keyboard)
-            elif service_id == '79d77421-c234-4f8b-a643-bb31c79d388d' and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
-                keyboard = await buttons.menu_menu()
-                return await message.answer("Кратко изложите суть обращения", keyboard=keyboard)
-            elif service_id == '81914e42-5ce6-477a-a49c-52299d37f8ca' and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
-                keyboard = await buttons.menu_menu()
-                return await message.answer('Укажите тип объекта недвижимости (жилое помещение, квартира; нежилое помещение; земельный участок)', keyboard=keyboard)
+                return await message.answer("Необходимо сделать фотографии (услуга предоставляется в отделах МФЦ и ТОСП ОЭЗ ТВТ. При записи в другие ТОСП услуга не предоставляется)", keyboard=keyboard)
 
-            services_id_params_field_5 = ('8f5e514e-dcce-41cf-8b56-38db6af10056',
-                                '81914e42-5ce6-477a-a49c-52299d37f8ca',
-                                '79d77421-c234-4f8b-a643-bb31c79d388d',
-                                '976eb69d-83cb-42b9-893a-926e11956393',
-                                'f94fd42b-611b-460a-8270-059526b40d35',
-                                '78402a5a-321b-4213-a081-a32a29c0317d',
-                                '5e90fc3f-f0f6-4348-a30a-18b0b0851627',
-                                '52cc58f4-2f75-46b2-8065-abe1c6ed6889',
-                                '4b7b705a-8b12-4f07-b26f-d573e6f096c2')
+            elif service_id in ('17118d23-60fb-4a59-914f-4504867efe93', 'f0a354bd-1da0-4fbf-bf00-0a83f27e7c90', '785a79e3-b824-4025-9301-c581e09aae36', 'cde2fc0c-98b0-4d1b-80fe-91f4828a9b80') and field_1 == 'None':
+                ctx.set(f'{user_id}: field_1', payload_data)
+                keyboard = await buttons.yes_no()
+                return await message.answer("Хочу оформить доставку готового результата домой/в офис (от 650 руб)", keyboard=keyboard)
+
+            elif service_id in ('2a5f23a5-4ac1-4a51-9e75-9556137dc8cd') and field_1 == 'None':
+                ctx.set(f'{user_id}: field_1', payload_data)
+                keyboard = await buttons.yes_no()
+                return await message.answer("Используются средства материнского капитала (иной сертификат) / кредитные средства (ипотека)/расчет на момент подписания договора не произведен полностью", keyboard=keyboard)
+
+            elif service_id in ('5d1269bc-8bc9-4dec-aa9f-6e2a304b710c') and field_1 == 'None':
+                ctx.set(f'{user_id}: field_1', payload_data)
+                keyboard = await buttons.yes_no()
+                return await message.answer("Услуга „Госключ“ не предоставляется во всех ТОСП. Запишитесь в другой отдел МФЦ.", keyboard=keyboard)
+
+            elif service_id in ('5750aebb-7114-4448-809d-4bd1876ada50') and field_1 == 'None':
+                ctx.set(f'{user_id}: field_1', payload_data)
+                keyboard = await buttons.yes_no()
+                return await message.answer("Обращаем ваше внимание: сделать фотографию для документов можно при обращении в отделы МФЦ и ТОСП ОЭЗ ТВТ. При записи в другие ТОСП данная услуга не предоставляется", keyboard=keyboard)
+
+            elif service_id in ('17ec4b3e-2c6a-4ac8-9ba6-46ce6046d935', '6da47969-070a-47e2-b28c-014076669899') and field_1 == 'None':
+                ctx.set(f'{user_id}: field_1', payload_data)
+                keyboard = await buttons.yes_no()
+                return await message.answer("Хочу оформить доставку готового результата на дом/в офис (от 650 руб)", keyboard=keyboard)
+
+            elif service_id in ('4c43c93c-068b-4c71-b393-e2ab871401d5') and field_1 == 'None':
+                ctx.set(f'{user_id}: field_1', payload_data)
+                keyboard = await buttons.yes_no()
+                return await message.answer("Необходимо составление списка кредиторов", keyboard=keyboard)
+
+            elif service_id in ('25507ec1-e854-4c91-add8-9e7854c9fa13') and field_1 == 'None':
+                ctx.set(f'{user_id}: field_1', payload_data)
+                keyboard = await buttons.yes_no()
+                return await message.answer("Хочу оформить доставку готового результата на дом/в офис (от 650 руб)", keyboard=keyboard)
+
+            services_id_params_field_5 = ('f63c0794-48d5-4013-aaed-7c6d9d3a9d53',
+                                '17118d23-60fb-4a59-914f-4504867efe93',
+                                'f0a354bd-1da0-4fbf-bf00-0a83f27e7c90',
+                                '2a5f23a5-4ac1-4a51-9e75-9556137dc8cd',
+                                '785a79e3-b824-4025-9301-c581e09aae36',
+                                '5d1269bc-8bc9-4dec-aa9f-6e2a304b710c',
+                                '5750aebb-7114-4448-809d-4bd1876ada50',
+                                '17ec4b3e-2c6a-4ac8-9ba6-46ce6046d935',
+                                '6da47969-070a-47e2-b28c-014076669899',
+                                '4c43c93c-068b-4c71-b393-e2ab871401d5',
+                                'cde2fc0c-98b0-4d1b-80fe-91f4828a9b80',
+                                '25507ec1-e854-4c91-add8-9e7854c9fa13')
 
             if payload_data in numbers or 'yes' in payload_data or 'no' in payload_data:
-                if service_id == '8f5e514e-dcce-41cf-8b56-38db6af10056' and ctx.get(f'{user_id}: field_1') == 'None':
-                    ctx.set(f'{user_id}: field_1', message.text)
-                    keyboard = await buttons.params_2()
-                    return await message.answer(loaded_data['69'], keyboard=keyboard)
-                elif service_id == '8f5e514e-dcce-41cf-8b56-38db6af10056' and field_2 == 'None':
+                if service_id == 'f63c0794-48d5-4013-aaed-7c6d9d3a9d53' and field_2 == 'None':
                     ctx.set(f'{user_id}: field_2', payload_data)
-                    keyboard = await buttons.params_1()
-                    await message.answer("Назовите количество участников сделки", keyboard=keyboard)
-                elif service_id == '8f5e514e-dcce-41cf-8b56-38db6af10056' and field_3 == 'None':
+                    keyboard = await buttons.yes_no()
+                    return await message.answer("Хочу оформить доставку готового результата домой/в офис (от 650 руб)", keyboard=keyboard)
+                elif service_id == '2a5f23a5-4ac1-4a51-9e75-9556137dc8cd' and field_2 == 'None':
+                    ctx.set(f'{user_id}: field_2', payload_data)
+                    keyboard = await buttons.yes_no()
+                    await message.answer("Необходимо составить договор купли-продажи", keyboard=keyboard)
+                elif service_id in ('2a5f23a5-4ac1-4a51-9e75-9556137dc8cd') and field_3 == 'None':
                     ctx.set(f'{user_id}: field_3', payload_data)
                     keyboard = await buttons.yes_no()
-                    await message.answer(loaded_data['75'], keyboard=keyboard)
-                elif service_id == '8f5e514e-dcce-41cf-8b56-38db6af10056' and field_4 == 'None':
-                    ctx.set(f'{user_id}: field_4', payload_data)
+                    await message.answer("Хочу оформить доставку готового результата на дом/в офис (от 650 руб)", keyboard=keyboard)
+
+                elif service_id == '25507ec1-e854-4c91-add8-9e7854c9fa13' and field_2 == 'None':
+                    ctx.set(f'{user_id}: field_2', payload_data)
                     keyboard = await buttons.yes_no()
-                    await message.answer(loaded_data['76'], keyboard=keyboard)
+                    await message.answer('Используются средства материнского капитала (иной сертификат) / кредитные средства (ипотека)/расчет на момент подписания договора не произведен полностью', keyboard=keyboard)
+
+                elif service_id == '25507ec1-e854-4c91-add8-9e7854c9fa13' and field_3 == 'None':
+                    ctx.set(f'{user_id}: field_3', payload_data)
+                    keyboard = await buttons.yes_no()
+                    await message.answer('Необходимо составить договор купли-продажи', keyboard=keyboard)
 
                 elif service_id in services_id_params_field_5:
 
@@ -3424,17 +3444,9 @@ def process_1():
                         ctx.set(f'{user_id}: field_5', payload_data)
                         field_5 = ctx.get(f'{user_id}: field_5')
 
-                    # if field_5 == 'no' and service_id in 'f94fd42b-611b-460a-8270-059526b40d35':
-                    #     print('TEST 3')
-                    #     ctx.set(f'{user_id}: field_1', 'None')
-                    #     ctx.set(f'{user_id}: field_5', 'None')
-                    #     await bot.state_dispenser.set(message.peer_id, SuperStates.DEPARTMENT)
-                    #     keyboard = await buttons.services_section(ctx.get(f'{user_id}: department'))
-                    #     return await message.answer("Выберите услугу", keyboard=keyboard)
-
-                    if field_5 == 'yes' and service_id == '4b7b705a-8b12-4f07-b26f-d573e6f096c2' and ctx.get(f'{user_id}: field_3') == 'None':
-                        keyboard = await buttons.menu_menu()
-                        return await message.answer("Напишите адрес электронной почты", keyboard=keyboard)
+                    # if field_5 == 'yes' and service_id == '4b7b705a-8b12-4f07-b26f-d573e6f096c2' and ctx.get(f'{user_id}: field_3') == 'None':
+                    #     keyboard = await buttons.menu_menu()
+                    #     return await message.answer("Напишите адрес электронной почты", keyboard=keyboard)
 
                     fields = [field_1, field_2, field_3, field_4, field_5, field_6]
 
@@ -3445,34 +3457,93 @@ def process_1():
                     # Теперь можно обновить исходные переменные, если это необходимо
                     field_1, field_2, field_3, field_4, field_5, field_6 = fields
 
-                    res = {
-                        "casecount": int(field_1),
-                        "fields":
-                        {
-                            "cb3e610a-49cc-45c3-a7e4-7867036551ea": field_2,
-                            "6e349207-5486-4efa-90a2-0f5b86765b36": field_3,
-                            "fec9e657-aa1c-428a-a7d9-c4d977d7cccd": field_4,
-                            "6c8b9903-e522-4d95-af0d-d7d1f688aa62": field_5,
-                            "aa50aae2-8879-4945-9553-825e911fc9c4": field_6,
-                            "b1a8f2ae-3a16-4018-ad69-0a843e61796c": field_2,
-                            "667a73c2-e026-483d-8033-1caadcea8f99": field_3,
-                            "fbc884bf-b18b-4591-8f4d-fd229b9dc11d": field_4,
-                            "a3e9a616-5b11-4e59-89f4-be72b3d5bffc": field_5,
-                            "541f0b86-f354-40ae-b2cc-71b091929e31": field_3,
-                            "64be467d-5881-416e-be81-fc697334b6e4": field_4,
-                            "59b6fc18-2721-4a0f-b273-4fb9c9f7871a": field_5,
-                            "a8d3ef9f-86b2-43e8-8be2-5a6b8e17874c": field_5,
-                            "5eddb5e1-aa68-4534-9417-49fc4f7c26dc": field_5,
-                            "2703ff9e-319c-4b0a-a152-67b3614839d1": field_5,
-                            "75654cbd-f06c-4a15-b13c-45c21a8e693d": field_5,
-                            "5fd82d26-78c1-4223-9f2f-9b4c044f0b88": field_2,
-                            "48b24708-ad36-4aa7-9772-17940e7741c8": field_2,
-                            "cf535155-7337-4310-84d5-3e6e720bf36e": field_5,
-                            "56ed2b59-2293-42c7-8493-46d30cfebdf6": field_3,
-                            "4b2ab9f4-f1b2-4b41-8e1b-fd719bd797b3": field_2,
-                            "26d6f523-84e6-4872-b0a4-a204f052adc7": field_5
+                    if service_id == 'f63c0794-48d5-4013-aaed-7c6d9d3a9d53':
+                        res = {
+                            "casecount": int(field_1),
+                            "fields":
+                            {
+                                "Необходимо сделать фотографии (услуга предоставляется в отделах МФЦ и ТОСП ОЭЗ ТВТ. При записи в другие ТОСП услуга не предоставляется)": field_2,
+
+                                "Хочу оформить доставку готового результата домой/в офис (от 650 руб)": field_5
+                            }
                         }
-                    }
+
+                    elif service_id in ('17118d23-60fb-4a59-914f-4504867efe93', 'f0a354bd-1da0-4fbf-bf00-0a83f27e7c90', '785a79e3-b824-4025-9301-c581e09aae36', 'cde2fc0c-98b0-4d1b-80fe-91f4828a9b80'):
+                        res = {
+                            "casecount": int(field_1),
+                            "fields":
+                            {
+                                "Хочу оформить доставку готового результата домой/в офис (от 650 руб)": field_5
+                            }
+                        }
+
+                    elif service_id in ('2a5f23a5-4ac1-4a51-9e75-9556137dc8cd'):
+                        res = {
+                            "casecount": int(field_1),
+                            "fields":
+                            {
+                                "Используются средства материнского капитала (иной сертификат) / кредитные средства (ипотека)/расчет на момент подписания договора не произведен полностью": field_2,
+                                "Необходимо составить договор купли-продажи": field_3,
+                                "Хочу оформить доставку готового результата на дом/в офис (от 650 руб)": field_5
+                            }
+                        }
+
+                    elif service_id in ('5d1269bc-8bc9-4dec-aa9f-6e2a304b710c'):
+                        res = {
+                            "casecount": int(field_1),
+                            "fields":
+                            {
+                                "Услуга „Госключ“ не предоставляется во всех ТОСП. Запишитесь в другой отдел МФЦ.": field_5
+                            }
+                        }
+
+                    elif service_id in ('5750aebb-7114-4448-809d-4bd1876ada50'):
+                        res = {
+                            "casecount": int(field_1),
+                            "fields":
+                            {
+                                "Обращаем ваше внимание: сделать фотографию для документов можно при обращении в отделы МФЦ и ТОСП ОЭЗ ТВТ. При записи в другие ТОСП данная услуга не предоставляется": field_5
+                            }
+                        }
+
+                    elif service_id in ('17ec4b3e-2c6a-4ac8-9ba6-46ce6046d935', '6da47969-070a-47e2-b28c-014076669899'):
+                        res = {
+                            "casecount": int(field_1),
+                            "fields":
+                            {
+                                "Хочу оформить доставку готового результата на дом/в офис (от 650 руб)": field_5
+                            }
+                        }
+
+                    elif service_id in ('4c43c93c-068b-4c71-b393-e2ab871401d5'):
+                        res = {
+                            "casecount": int(field_1),
+                            "fields":
+                            {
+                                "Необходимо составление списка кредиторов": field_5
+                            }
+                        }
+
+                    elif service_id in ('25507ec1-e854-4c91-add8-9e7854c9fa13'):
+                        res = {
+                            "casecount": int(field_1),
+                            "fields":
+                            {
+                                "Хочу оформить доставку готового результата на дом/в офис (от 650 руб)": field_2,
+                                "Используются средства материнского капитала (иной сертификат) / кредитные средства (ипотека)/расчет на момент подписания договора не произведен полностью": field_3,
+                                "Необходимо составить договор купли-продажи": field_5
+                            }
+                        }
+
+                    else:
+                        res = {
+                            "casecount": int(field_1),
+                            "fields":
+                            {
+
+                            }
+                        }
+
                     fields = json.dumps((res),ensure_ascii=False)
 
                     ctx.set(f'{user_id}: fields', fields)

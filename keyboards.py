@@ -91,6 +91,9 @@ class buttons:
             cls._add_button(keyboard, "Земля, дом, квартира (недвижимость)", {"cmd": "nedvij"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
 
+            cls._add_button(keyboard, "Предпринимательство/ Лицензирование", {"cmd": "bankr"}, KeyboardButtonColor.POSITIVE)
+            keyboard.row()
+
             if department in tomsk_district:
                 cls._add_button(keyboard, "ТОСП", {"cmd": "tosp_1"}, KeyboardButtonColor.POSITIVE)
                 keyboard.row()
@@ -327,8 +330,7 @@ class buttons:
             keyboard.row()
             cls._add_button(keyboard, "Предпринимательство", {"cmd": "predprin"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
-            cls._add_button(keyboard, "Предпринимательство/ Лицензирование", {"cmd": "bankr"}, KeyboardButtonColor.POSITIVE)
-            keyboard.row()
+
             cls._add_button(keyboard, "ИНН/СНИЛС/справки", {"cmd": "sprav"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
             cls._add_button(keyboard, "Справки СВО/ Госключ/ Выборы", {'cmd': 'gos_key'}, KeyboardButtonColor.POSITIVE)
