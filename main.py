@@ -3355,7 +3355,7 @@ def process_1():
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['40'], keyboard=keyboard)
 
-            # print('POPAL', payload_data)
+            print('POPAL', payload_data)
 
             if service_id == 'f63c0794-48d5-4013-aaed-7c6d9d3a9d53' and field_1 == 'None':
                 ctx.set(f'{user_id}: field_1', payload_data)
@@ -3453,6 +3453,8 @@ def process_1():
                     for i, field in enumerate(fields):
                         if field == 'yes':
                             fields[i] = '1'  # Заменяем значение в списке
+                        elif field == 'no':
+                            fields[i] = '0'  # Заменяем значение в списке
 
                     # Теперь можно обновить исходные переменные, если это необходимо
                     field_1, field_2, field_3, field_4, field_5, field_6 = fields
