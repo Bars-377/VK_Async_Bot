@@ -656,6 +656,7 @@ class buttons:
             keyboard.row()
             cls._add_button(keyboard, "Академгородок", {"cmd": "oez-tvt"}, KeyboardButtonColor.POSITIVE)
             cls._add_button(keyboard, '"Дом предпринимателя"', {"cmd": "dom-predprinimatelya"}, KeyboardButtonColor.POSITIVE)
+            cls._add_button(keyboard, '"Промсвязьбанк"', {"cmd": "pao-promsvyazbank"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
             cls._add_button(keyboard, "Назад", {"cmd": "filial"}, KeyboardButtonColor.NEGATIVE)
             cls._add_button(keyboard, "В главное меню", {"cmd": "menu"}, KeyboardButtonColor.PRIMARY)

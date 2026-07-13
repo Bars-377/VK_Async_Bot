@@ -5,6 +5,8 @@ import certifi
 os.environ['SSL_CERT_FILE'] = certifi.where()
 os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 
+from functools import wraps
+
 from multiprocessing import Process
 from vkbottle import BaseStateGroup
 from vkbottle import Bot
@@ -865,6 +867,32 @@ def process_1():
         except Exception as e:
             await errors(message, e)
 
+    def retry_async(max_attempts=3, delay=1, backoff=2):
+        """Декоратор для повторных попыток асинхронных функций"""
+        def decorator(func):
+            @wraps(func)
+            async def wrapper(*args, **kwargs):
+                current_delay = delay
+                last_exception = None
+
+                for attempt in range(max_attempts):
+                    try:
+                        return await func(*args, **kwargs)
+                    except Exception as e:
+                        last_exception = e
+                        logger.warning(f"Attempt {attempt + 1}/{max_attempts} failed for {func.__name__}: {e}")
+
+                        if attempt < max_attempts - 1:
+                            await asyncio.sleep(current_delay)
+                            current_delay *= backoff
+                        else:
+                            logger.error(f"All {max_attempts} attempts failed for {func.__name__}")
+                            raise
+
+                raise last_exception
+            return wrapper
+        return decorator
+
     @bot.labeler.message(state=SuperStates.PHONE_INPUT)
     async def phone_input(message: Message):
         user_id = message.from_id
@@ -1012,6 +1040,7 @@ def process_1():
         except Exception as e:
             await errors(message, e)
 
+    @retry_async(max_attempts=3, delay=1)
     async def upload_photo_from_url(url: str, message: Message) -> str:
 
         from vkbottle.tools import PhotoMessageUploader
@@ -1037,139 +1066,705 @@ def process_1():
                 else:
                     raise Exception(f"Не удалось скачать изображение. Код: {resp.status}")
 
-    async def cons_payload_data(message, photo=None, keyboard=None, file=None):
+    import requests
+    from typing import Optional, List, Dict, Any, Union
+
+    # Константы
+    ENDASH = "–"
+    DAY_LABELS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+    API_URL = "https://md.tomsk.ru/api/v1/data/filials/"
+
+
+    def _format_day(day: Dict[str, Any], i: int) -> str:
+        """
+        Форматирует один день в строку с графиком работы (для txt).
+        """
+        day_label = DAY_LABELS[i]
+
+        if day.get("holiday", False):
+            return f"{day_label}: выходной"
+
+        start = day.get("startTime", "не указано")
+        end = day.get("endTime", "не указано")
+        work_hours = f"{start}{ENDASH}{end}"
+
+        start_break = day.get("startBreak")
+        end_break = day.get("endBreak")
+
+        if start_break and end_break:
+            break_info = f" (перерыв: {start_break}{ENDASH}{end_break})"
+            return f"{day_label}: {work_hours}{break_info}"
+
+        return f"{day_label}: {work_hours}"
+
+
+    def format_schedule(work_schedule: List[Dict[str, Any]]) -> str:
+        """
+        Форматирует расписание работы филиала (для txt).
+        """
+        if not work_schedule or len(work_schedule) != 7:
+            return "Некорректные данные расписания"
+
+        day_order = {"MONDAY": 0, "TUESDAY": 1, "WEDNESDAY": 2,
+                    "THURSDAY": 3, "FRIDAY": 4, "SATURDAY": 5, "SUNDAY": 6}
+
+        sorted_schedule = sorted(
+            work_schedule,
+            key=lambda d: day_order.get(d.get("dayOfWeek"), 999)
+        )
+
+        return "\n".join(_format_day(day, i) for i, day in enumerate(sorted_schedule))
+
+
+    def get_filials() -> List[Dict[str, Any]]:
+        """
+        Получает список всех филиалов из API.
+        """
+        try:
+            response = requests.get(API_URL, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("data", [])
+        except (requests.RequestException, ValueError) as e:
+            print(f"⚠️ Ошибка при получении данных: {e}")
+            return []
+
+
+    def get_filial_by_slug(slug: str) -> Optional[Dict[str, Any]]:
+        """
+        Получает филиал по его slug.
+        """
+        filials = get_filials()
+        if not filials:
+            return None
+
+        slug_lower = slug.lower().strip()
+
+        for filial in filials:
+            if filial.get("slug", "").lower() == slug_lower:
+                return filial
+
+        return None
+
+
+    def get_filial_schedule(filial: Dict[str, Any]) -> str:
+        """
+        Получает отформатированное расписание для конкретного филиала.
+        """
+        try:
+            work_schedule = filial.get("work_schedule", {})
+            schedule_list = work_schedule.get("json", [])
+
+            if not schedule_list:
+                return "Расписание отсутствует"
+
+            return format_schedule(schedule_list)
+        except Exception as e:
+            return f"Ошибка форматирования: {e}"
+
+    @retry_async(max_attempts=3, delay=1)
+    async def get_filial_info_by_slug(slugs: Union[str, tuple, list]) -> str:
+        """
+        Возвращает полную информацию об одном или нескольких филиалах по slug в формате txt.
+
+        Args:
+            slugs: Уникальный идентификатор филиала или кортеж/список идентификаторов
+                Примеры:
+                - get_filial_info_by_slug("s-monastyrka")
+                - get_filial_info_by_slug(("s-monastyrka", "s-krasnyy-yar"))
+                - get_filial_info_by_slug(["s-monastyrka", "s-krasnyy-yar", "s-podgornoe"])
+
+        Returns:
+            Отформатированная строка с информацией о филиале(ах)
+        """
+        # Если передан один slug как строка
+        if isinstance(slugs, str):
+            slugs = [slugs]
+        # Если передан кортеж или список
+        elif isinstance(slugs, (tuple, list)):
+            slugs = list(slugs)  # Преобразуем в список для удобства
+        else:
+            return "❌ Неверный формат slug"
+
+        if not slugs:
+            return "❌ Не указан slug филиала"
+
+        # Формируем вывод для всех случаев одинаково
+        output = []
+
+        # Заголовок
+        if len(slugs) == 1:
+            output.append("=" * 50)
+            output.append("ИНФОРМАЦИЯ О ФИЛИАЛЕ")
+            output.append("=" * 50)
+        else:
+            output.append("=" * 60)
+            output.append(f"ИНФОРМАЦИЯ ПО {len(slugs)} ФИЛИАЛАМ")
+            output.append("=" * 60)
+
+        # Обрабатываем каждый филиал
+        for i, slug in enumerate(slugs, 1):
+            filial = get_filial_by_slug(slug)
+
+            if not filial:
+                output.append(f"\n{i}. ❌ Филиал с slug '{slug}' не найден")
+                continue
+
+            # Получаем данные
+            name = filial.get('name', 'Нет названия')
+            address = filial.get('address', 'Адрес не указан')
+            schedule = get_filial_schedule(filial)
+
+            # Формируем вывод для каждого филиала (одинаковый формат)
+            if len(slugs) == 1:
+                # Для одного филиала - без номера
+                output.append(f"\n📍 {name}")
+                output.append("-" * 50)
+                output.append(f"Адрес: {address}")
+                output.append("")
+                output.append(f"📅 График работы:")
+                output.append(schedule)
+            else:
+                # Для нескольких филиалов - с номером
+                output.append(f"\n{i}. 📍 {name}")
+                output.append("-" * 50)
+                output.append(f"Адрес: {address}")
+                output.append("")
+                output.append(f"📅 График работы:")
+                output.append(schedule)
+
+            # Добавляем пустую строку между филиалами
+            if i < len(slugs):
+                output.append("")
+
+        # Нижняя граница
+        if len(slugs) == 1:
+            output.append("")
+            output.append("=" * 50)
+        else:
+            output.append("")
+            output.append("=" * 60)
+
+        return "\n".join(output)
+
+
+    async def save_filial_info_to_txt(slug: str, filename: str = None) -> str:
+        """
+        Сохраняет информацию о филиале в txt файл.
+
+        Args:
+            slug: Уникальный идентификатор филиала
+            filename: Имя файла (если не указан, будет slug.txt)
+
+        Returns:
+            Путь к сохранённому файлу
+        """
+        if filename is None:
+            filename = f"{slug}.txt"
+
+        info = await get_filial_info_by_slug(slug)
+
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(info)
+
+        return filename
+
+
+    def get_all_slugs() -> List[str]:
+        """
+        Получает список всех slug филиалов.
+        """
+        filials = get_filials()
+        if not filials:
+            return []
+
+        return [f.get("slug") for f in filials if f.get("slug")]
+
+
+    def list_all_filials() -> str:
+        """
+        Возвращает строку со списком всех филиалов и их slug (в формате txt).
+        """
+        filials = get_filials()
+        if not filials:
+            return "Филиалы не найдены"
+
+        output = []
+        output.append("=" * 50)
+        output.append("СПИСОК ВСЕХ ФИЛИАЛОВ")
+        output.append("=" * 50)
+
+        for f in filials:
+            name = f.get('name', 'Без названия')
+            slug = f.get('slug', 'без-slug')
+            output.append(f"")
+            output.append(f"Название: {name}")
+            output.append(f"Slug: {slug}")
+            output.append("-" * 30)
+
+        return "\n".join(output)
+
+
+    # async def cons_payload_data(message, photo=None, keyboard=None, file=None, slug=None, cons=None):
+    #     url_schedule = 'http://172.18.11.104:8001/api/v1/filials/chart/'
+
+    #     cons_message = None
+    #     consultation_info = None
+    #     consultation_index = None
+
+    #     # ====== ПОЛУЧАЕМ КОНСУЛЬТАЦИЮ ПО ИНДЕКСУ ======
+    #     if cons:
+    #         try:
+    #             # Определяем, где передан индекс консультации
+    #             if photo:
+    #                 consultation_index = photo
+    #             elif file:
+    #                 consultation_index = file
+
+    #             # Если есть индекс, ищем консультацию в store
+    #             if consultation_index:
+    #                 # Проверяем, есть ли такой ключ в store.consultations
+    #                 if consultation_index in store.consultations:
+    #                     consultation_info = store.consultations[consultation_index]
+    #                     logger.info(f"Found consultation by index '{consultation_index}': {consultation_info}")
+    #                 else:
+    #                     # Пробуем найти по частичному совпадению
+    #                     for key, value in store.consultations.items():
+    #                         if consultation_index in key or key in consultation_index:
+    #                             consultation_info = value
+    #                             logger.info(f"Found consultation by partial match: {key}")
+    #                             break
+
+    #             # Если нашли консультацию, получаем данные
+    #             if consultation_info:
+    #                 cons_data = consultation_info.get('data', {})
+    #                 cons_message = cons_data.get('message', '')
+    #                 cons_name = consultation_info.get('name', consultation_index)
+    #                 logger.info(f"Consultation found: {cons_name} -> {cons_message[:50]}...")
+    #         except Exception as e:
+    #             logger.error(f"Error retrieving consultation: {e}")
+    #             # Продолжаем выполнение без консультации
+
+    #     # ====== ОБРАБОТКА В ЗАВИСИМОСТИ ОТ ПАРАМЕТРОВ ======
+
+    #     # СЛУЧАЙ 1: Есть и photo, и slug
+    #     if photo and slug and not isinstance(photo, tuple):
+    #         try:
+    #             ph = await upload_photo_from_url(f"{url_schedule}/{photo}", message)
+    #             info = await get_filial_info_by_slug(slug)  # синхронная функция
+
+    #             return await message.answer(
+    #                 info,
+    #                 keyboard=keyboard,
+    #                 attachment=ph
+    #             )
+    #         except Exception as e:
+    #             logger.error(f"Error in CASE 1 (photo+slug): {e}")
+    #             return await message.answer(
+    #                 "Произошла ошибка при загрузке данных. Попробуйте позже.",
+    #                 keyboard=keyboard
+    #             )
+
+    #     # СЛУЧАЙ 2: Есть и photo, и file
+    #     elif photo and file and not isinstance(photo, tuple):
+    #         try:
+    #             ph = await upload_photo_from_url(f"{url_schedule}/{photo}", message)
+    #             file_content = await read_file(file)
+
+    #             if cons_message:
+    #                 return await message.answer(
+    #                     f"{file_content}\n\n📋 {cons_message}",
+    #                     keyboard=keyboard,
+    #                     attachment=ph
+    #                 )
+
+    #             return await message.answer(
+    #                 file_content,
+    #                 keyboard=keyboard,
+    #                 attachment=ph
+    #             )
+    #         except Exception as e:
+    #             logger.error(f"Error in CASE 2 (photo+file): {e}")
+    #             return await message.answer(
+    #                 "Произошла ошибка при загрузке данных. Попробуйте позже.",
+    #                 keyboard=keyboard
+    #             )
+
+    #     # СЛУЧАЙ 3: Только file
+    #     elif file and not photo:
+    #         try:
+    #             # Если в file передан индекс консультации
+    #             if consultation_info and cons_message:
+    #                 return await message.answer(
+    #                     f"📋 {cons_message}",
+    #                     keyboard=keyboard
+    #                 )
+
+    #             # Иначе читаем файл
+    #             file_content = await read_file(file)
+    #             return await message.answer(
+    #                 file_content,
+    #                 keyboard=keyboard
+    #             )
+    #         except Exception as e:
+    #             logger.error(f"Error in CASE 3 (only file): {e}")
+    #             return await message.answer(
+    #                 "Произошла ошибка при чтении файла. Попробуйте позже.",
+    #                 keyboard=keyboard
+    #             )
+
+    #     # СЛУЧАЙ 4: photo - это кортеж (несколько фото)
+    #     elif isinstance(photo, tuple):
+    #         try:
+    #             # Отправляем все фото
+    #             for i in range(len(photo)-1):
+    #                 ph = await upload_photo_from_url(f"{url_schedule}/{photo[i]}", message)
+    #                 await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+
+    #             ph = await upload_photo_from_url(f"{url_schedule}/{photo[-1]}", message)
+
+    #             # Если есть консультация, добавляем ее сообщение
+    #             if not file:
+    #                 if cons_message:
+    #                     return await message.answer(
+    #                         f"📋 {cons_message}",
+    #                         keyboard=keyboard,
+    #                         attachment=ph
+    #                     )
+    #                 return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+    #             else:
+    #                 file_content = await read_file(file)
+    #                 if cons_message:
+    #                     return await message.answer(
+    #                         f"{file_content}\n\n📋 {cons_message}",
+    #                         keyboard=keyboard,
+    #                         attachment=ph
+    #                     )
+    #                 return await message.answer(
+    #                     file_content,
+    #                     keyboard=keyboard,
+    #                     attachment=ph
+    #                 )
+    #         except Exception as e:
+    #             logger.error(f"Error in CASE 4 (tuple photos): {e}")
+    #             return await message.answer(
+    #                 "Произошла ошибка при загрузке изображений. Попробуйте позже.",
+    #                 keyboard=keyboard
+    #             )
+
+    #     # СЛУЧАЙ 5: Только photo
+    #     elif photo and not file:
+    #         try:
+    #             ph = await upload_photo_from_url(f"{url_schedule}/{photo}", message)
+
+    #             if cons_message:
+    #                 return await message.answer(
+    #                     f"📋 {cons_message}",
+    #                     keyboard=keyboard,
+    #                     attachment=ph
+    #                 )
+
+    #             logger.warning(f"Consultation not found for index: {consultation_index}")
+    #             return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+    #         except Exception as e:
+    #             logger.error(f"Error in CASE 5 (only photo): {e}")
+    #             return await message.answer(
+    #                 "Произошла ошибка при загрузке изображения. Попробуйте позже.",
+    #                 keyboard=keyboard
+    #             )
+
+    #     # СЛУЧАЙ 6: Нет параметров
+    #     else:
+    #         try:
+    #             return await message.answer("Выберите раздел", keyboard=keyboard)
+    #         except Exception as e:
+    #             logger.error(f"Error in CASE 6 (no params): {e}")
+    #             return await message.answer(
+    #                 "Произошла ошибка. Попробуйте позже.",
+    #                 keyboard=keyboard
+    #             )
+
+    import hashlib
+    import json
+    from datetime import date
+    from typing import Optional
+
+    # Класс для управления кешем
+    class CacheManager:
+        def __init__(self):
+            self.cache = {}
+            self.cache_date = None
+
+        def _get_today(self):
+            return date.today()
+
+        def _get_cache_key(self, *args, **kwargs):
+            """Создает уникальный ключ для кеша"""
+            key_data = f"{args}{kwargs}".encode('utf-8')
+            return hashlib.md5(key_data).hexdigest()
+
+        def get(self, key):
+            """Получает данные из кеша, если они актуальны"""
+            today = self._get_today()
+
+            # Если дата изменилась - очищаем кеш
+            if self.cache_date != today:
+                self.clear()
+                self.cache_date = today
+                return None
+
+            return self.cache.get(key)
+
+        def set(self, key, value):
+            """Сохраняет данные в кеш"""
+            today = self._get_today()
+
+            if self.cache_date != today:
+                self.clear()
+                self.cache_date = today
+
+            self.cache[key] = value
+
+        def clear(self):
+            """Очищает кеш"""
+            self.cache.clear()
+
+    # Создаем глобальный экземпляр менеджера кеша
+    cache_manager = CacheManager()
+
+    async def cons_payload_data(message, photo=None, keyboard=None, file=None, slug=None, cons=None):
         url_schedule = 'http://172.18.11.104:8001/api/v1/filials/chart/'
 
-        # # ТЕСТ
-        # photo = "reg-uchet-snyatie"
-        # keyboard = None
-        # file = None
-
-        # ====== ПОЛУЧАЕМ КОНСУЛЬТАЦИЮ ПО ИНДЕКСУ ======
+        cons_message = None
         consultation_info = None
         consultation_index = None
 
-        # Определяем, где передан индекс консультации
-        if photo:
-            consultation_index = photo
-        elif file:
-            consultation_index = file
+        # ====== ПОЛУЧАЕМ КОНСУЛЬТАЦИЮ ПО ИНДЕКСУ (с кешированием) ======
+        if cons:
+            try:
+                # Определяем, где передан индекс консультации
+                if photo and not isinstance(photo, tuple):
+                    consultation_index = photo
+                elif file:
+                    consultation_index = file
 
-        # Если есть индекс, ищем консультацию в store
-        if consultation_index:
-            # Проверяем, есть ли такой ключ в store.consultations
-            if consultation_index in store.consultations:
-                consultation_info = store.consultations[consultation_index]
-                logger.info(f"Found consultation by index '{consultation_index}': {consultation_info}")
-            else:
-                # Пробуем найти по частичному совпадению
-                for key, value in store.consultations.items():
-                    if consultation_index in key or key in consultation_index:
-                        consultation_info = value
-                        logger.info(f"Found consultation by partial match: {key}")
-                        break
+                # Если есть индекс, ищем консультацию в кеше или store
+                if consultation_index:
+                    # Создаем ключ для кеша консультации
+                    cons_cache_key = f"consultation_{consultation_index}"
+                    cached_cons = cache_manager.get(cons_cache_key)
 
-        # Если нашли консультацию, получаем данные
-        cons_data = None
-        cons_message = None
-        cons_name = None
+                    if cached_cons:
+                        consultation_info = cached_cons
+                        logger.info(f"Using cached consultation for '{consultation_index}'")
+                    else:
+                        # Проверяем store
+                        if consultation_index in store.consultations:
+                            consultation_info = store.consultations[consultation_index]
+                            # Сохраняем в кеш
+                            cache_manager.set(cons_cache_key, consultation_info)
+                            logger.info(f"Found consultation by index '{consultation_index}' and cached")
+                        else:
+                            # Пробуем найти по частичному совпадению
+                            for key, value in store.consultations.items():
+                                if consultation_index in key or key in consultation_index:
+                                    consultation_info = value
+                                    cache_manager.set(cons_cache_key, consultation_info)
+                                    logger.info(f"Found consultation by partial match: {key} and cached")
+                                    break
 
-        if consultation_info:
-            cons_data = consultation_info.get('data', {})
-            cons_message = cons_data.get('message', '')
-            cons_name = consultation_info.get('name', consultation_index)
-            logger.info(f"Consultation found: {cons_name} -> {cons_message[:50]}...")
+                # Если нашли консультацию, получаем данные
+                if consultation_info:
+                    cons_data = consultation_info.get('data', {})
+                    cons_message = cons_data.get('message', '')
+                    cons_name = consultation_info.get('name', consultation_index)
+                    logger.info(f"Consultation found: {cons_name} -> {cons_message[:50]}...")
+            except Exception as e:
+                logger.error(f"Error retrieving consultation: {e}")
 
         # ====== ОБРАБОТКА В ЗАВИСИМОСТИ ОТ ПАРАМЕТРОВ ======
 
-        # СЛУЧАЙ 1: Есть и photo, и file (консультация передана в photo)
-        if photo and file and not isinstance(photo, tuple):
-            ph = await upload_photo_from_url(f"{url_schedule}/{photo}", message)
+        # Вспомогательная функция для загрузки фото с кешированием
+        async def get_cached_photo(photo_id, message):
+            cache_key = f"photo_{photo_id}"
+            cached_photo = cache_manager.get(cache_key)
 
-            # Если есть консультация, добавляем ее сообщение к файлу
-            if cons_message:
+            if cached_photo:
+                logger.info(f"Using cached photo: {photo_id}")
+                return cached_photo
+
+            # Загружаем фото
+            ph = await upload_photo_from_url(f"{url_schedule}/{photo_id}", message)
+            cache_manager.set(cache_key, ph)
+            return ph
+
+        # Вспомогательная функция для чтения файла с кешированием
+        async def get_cached_file(file_id):
+            cache_key = f"file_{file_id}"
+            cached_file = cache_manager.get(cache_key)
+
+            if cached_file:
+                logger.info(f"Using cached file: {file_id}")
+                return cached_file
+
+            # Читаем файл
+            file_content = await read_file(file_id)
+            cache_manager.set(cache_key, file_content)
+            return file_content
+
+        # СЛУЧАЙ 1: Есть и photo, и slug
+        if photo and slug and not isinstance(photo, tuple):
+            try:
+                # Получаем информацию о филиале с кешированием
+                filial_cache_key = f"filial_{slug}"
+                cached_filial_info = cache_manager.get(filial_cache_key)
+
+                if cached_filial_info:
+                    info = cached_filial_info
+                    logger.info(f"Using cached filial info for: {slug}")
+                else:
+                    info = await get_filial_info_by_slug(slug)  # предполагаем, что функция async
+                    cache_manager.set(filial_cache_key, info)
+
+                ph = await get_cached_photo(photo, message)
+
                 return await message.answer(
-                    f"{await read_file(file)}\n\n📋 {cons_message}",
+                    info,
                     keyboard=keyboard,
                     attachment=ph
                 )
-            return await message.answer(
-                f"{await read_file(file)}",
-                keyboard=keyboard,
-                attachment=ph
-            )
+            except Exception as e:
+                logger.error(f"Error in CASE 1 (photo+slug): {e}")
+                return await message.answer(
+                    "Произошла ошибка при загрузке данных. Попробуйте позже.",
+                    keyboard=keyboard
+                )
 
-        # СЛУЧАЙ 2: Только file (консультация передана в file)
+        # СЛУЧАЙ 2: Есть и photo, и file
+        elif photo and file and not isinstance(photo, tuple):
+            try:
+                ph = await get_cached_photo(photo, message)
+                file_content = await get_cached_file(file)
+
+                # Кешируем финальный текст
+                final_text_key = f"combined_{photo}_{file}_{cons_message}"
+                cached_response = cache_manager.get(final_text_key)
+
+                if cons_message:
+                    response_text = f"{file_content}\n\n📋 {cons_message}"
+                else:
+                    response_text = file_content
+
+                # Если нет кеша для всего ответа, отправляем
+                if not cached_response or cached_response != response_text:
+                    return await message.answer(
+                        response_text,
+                        keyboard=keyboard,
+                        attachment=ph
+                    )
+                else:
+                    return await message.answer(
+                        cached_response,
+                        keyboard=keyboard,
+                        attachment=ph
+                    )
+            except Exception as e:
+                logger.error(f"Error in CASE 2 (photo+file): {e}")
+                return await message.answer(
+                    "Произошла ошибка при загрузке данных. Попробуйте позже.",
+                    keyboard=keyboard
+                )
+
+        # СЛУЧАЙ 3: Только file
         elif file and not photo:
-            print('POPAL 1')
+            try:
+                if consultation_info and cons_message:
+                    return await message.answer(
+                        f"📋 {cons_message}",
+                        keyboard=keyboard
+                    )
 
-            # Если в file передан индекс консультации
-            if consultation_info and cons_message:
-                # Показываем сообщение консультации
+                file_content = await get_cached_file(file)
                 return await message.answer(
-                    f"📋 {cons_message}",
+                    file_content,
                     keyboard=keyboard
                 )
-            else:
-                # Иначе читаем файл
+            except Exception as e:
+                logger.error(f"Error in CASE 3 (only file): {e}")
                 return await message.answer(
-                    f"{await read_file(file)}",
+                    "Произошла ошибка при чтении файла. Попробуйте позже.",
                     keyboard=keyboard
                 )
 
-        # СЛУЧАЙ 3: photo - это кортеж (несколько фото)
+        # СЛУЧАЙ 4: photo - это кортеж (несколько фото)
         elif isinstance(photo, tuple):
-            # Отправляем все фото
-            for i in range(len(photo)-1):
-                ph = await upload_photo_from_url(f"{url_schedule}/{photo[i]}", message)
-                await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+            try:
+                # Отправляем все фото с кешированием
+                for i in range(len(photo)-1):
+                    ph = await get_cached_photo(photo[i], message)
+                    await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
 
-            ph = await upload_photo_from_url(f"{url_schedule}/{photo[-1]}", message)
+                ph = await get_cached_photo(photo[-1], message)
 
-            # Если есть консультация, добавляем ее сообщение
-            if not file:
+                if not file:
+                    if cons_message:
+                        return await message.answer(
+                            f"📋 {cons_message}",
+                            keyboard=keyboard,
+                            attachment=ph
+                        )
+                    return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+                else:
+                    file_content = await get_cached_file(file)
+                    if cons_message:
+                        return await message.answer(
+                            f"{file_content}\n\n📋 {cons_message}",
+                            keyboard=keyboard,
+                            attachment=ph
+                        )
+                    return await message.answer(
+                        file_content,
+                        keyboard=keyboard,
+                        attachment=ph
+                    )
+            except Exception as e:
+                logger.error(f"Error in CASE 4 (tuple photos): {e}")
+                return await message.answer(
+                    "Произошла ошибка при загрузке изображений. Попробуйте позже.",
+                    keyboard=keyboard
+                )
+
+        # СЛУЧАЙ 5: Только photo
+        elif photo and not file:
+            try:
+                ph = await get_cached_photo(photo, message)
+
                 if cons_message:
                     return await message.answer(
                         f"📋 {cons_message}",
                         keyboard=keyboard,
                         attachment=ph
                     )
-                return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
-            else:
-                if cons_message:
-                    return await message.answer(
-                        f"{await read_file(file)}\n\n📋 {cons_message}",
-                        keyboard=keyboard,
-                        attachment=ph
-                    )
-                return await message.answer(
-                    f"{await read_file(file)}",
-                    keyboard=keyboard,
-                    attachment=ph
-                )
 
-        # СЛУЧАЙ 4: Только photo (консультация передана в photo)
-        elif photo and not file:
-            print('POPAL 2')
-
-            ph = await upload_photo_from_url(f"{url_schedule}/{photo}", message)
-
-            # ====== В POPAL 2 ИСПОЛЬЗУЕМ КОНСУЛЬТАЦИЮ ======
-            if cons_message:
-                # Отправляем фото с сообщением консультации
-                return await message.answer(
-                    f"📋 {cons_message}",
-                    keyboard=keyboard,
-                    attachment=ph
-                )
-            else:
-                # Если консультация не найдена, показываем только фото
                 logger.warning(f"Consultation not found for index: {consultation_index}")
                 return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+            except Exception as e:
+                logger.error(f"Error in CASE 5 (only photo): {e}")
+                return await message.answer(
+                    "Произошла ошибка при загрузке изображения. Попробуйте позже.",
+                    keyboard=keyboard
+                )
 
-        # СЛУЧАЙ 5: Нет параметров
+        # СЛУЧАЙ 6: Нет параметров
         else:
-            return await message.answer("Выберите раздел", keyboard=keyboard)
+            try:
+                return await message.answer("Выберите раздел", keyboard=keyboard)
+            except Exception as e:
+                logger.error(f"Error in CASE 6 (no params): {e}")
+                return await message.answer(
+                    "Произошла ошибка. Попробуйте позже.",
+                    keyboard=keyboard
+                )
 
     @bot.labeler.message(state=SuperStates.PHONE_INPUT_NEW)
     async def phone_input_new(message: Message):
@@ -1286,6 +1881,7 @@ def process_1():
     #     except Exception as e:
     #         await errors(message, e)
 
+    @retry_async(max_attempts=3, delay=1)
     async def read_file(file_path):
         project_dir = Path(__file__).resolve().parent
 
@@ -1335,7 +1931,7 @@ def process_1():
                     },
                     'krivosheinskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'kriv' / 'krivosheino.txt', 'keyboard': await buttons.krivosh_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'krivosheinskiy', 'keyboard': await buttons.krivosh_rayon()}
                     },
                     'kolp_rayon': {
                         'func': cons_payload_data,
@@ -1376,260 +1972,264 @@ def process_1():
 
                     'kirovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'tomsk' / 'kirovskiy.txt', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'kirovskiy', 'keyboard': await buttons.tomsk()}
                     },
 
                     'leninskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'tomsk' / 'leninskiy.txt', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'leninskiy', 'keyboard': await buttons.tomsk()}
                     },
                     'oktyabrskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'tomsk' / 'oktyabrskiy.txt', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'oktyabrskiy', 'keyboard': await buttons.tomsk()}
                     },
                     'sovetskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'tomsk' / 'sovetskiy.txt', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'sovetskiy', 'keyboard': await buttons.tomsk()}
                     },
                     'oez-tvt': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'tomsk' / 'akadem.txt', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'oez-tvt', 'keyboard': await buttons.tomsk()}
                     },
                     'dom-predprinimatelya': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'tomsk' / 'COU_business.txt', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'dom-predprinimatelya', 'keyboard': await buttons.tomsk()}
+                    },
+                    'pao-promsvyazbank': {
+                        'func': cons_payload_data,
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'pao-promsvyazbank', 'keyboard': await buttons.tomsk()}
                     },
                     'asinovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'asino.txt', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'asinovskiy', 'keyboard': await buttons.tomsk_obl()}
                     },
                     'g-kedrovyy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'kedtovij.txt', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'g-kedrovyy', 'keyboard': await buttons.tomsk_obl()}
                     },
                     'strezhevoy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'strezhevoj.txt', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'strezhevoy', 'keyboard': await buttons.tomsk_obl()}
                     },
                     'zato-seversk': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'seversk.txt', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'zato-seversk', 'keyboard': await buttons.tomsk_obl()}
                     },
                     'zyryanskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'ziryanskij.txt', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'zyryanskiy', 'keyboard': await buttons.tomsk_obl()}
                     },
                     'parabel': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'parabel.txt', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'parabel', 'keyboard': await buttons.tomsk_obl()}
                     },
                     'verhneketskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'verhneketskij.txt', 'keyboard': await buttons.tomsk_obl_1()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'verhneketskiy', 'keyboard': await buttons.tomsk_obl_1()}
                     },
                     'aleksandrovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'aleksandrovskij.txt', 'keyboard': await buttons.tomsk_obl_1()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'aleksandrovskiy', 'keyboard': await buttons.tomsk_obl_1()}
                     },
                     'teguldetskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'teguldet.txt', 'keyboard': await buttons.tomsk_obl_1()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'teguldetskiy', 'keyboard': await buttons.tomsk_obl_1()}
                     },
                     'chainskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'to' / 'chainskij.txt', 'keyboard': await buttons.tomsk_obl_1()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'chainskiy', 'keyboard': await buttons.tomsk_obl_1()}
                     },
                     'pervomayskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'perv' / 'pervomajskoje.txt', 'keyboard': await buttons.pervom_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'pervomayskiy', 'keyboard': await buttons.pervom_rayon()}
                     },
                     's-sergeevo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'perv' / 'sergeevo.txt', 'keyboard': await buttons.pervom_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-sergeevo', 'keyboard': await buttons.pervom_rayon()}
                     },
                     'p-orehovo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'perv' / 'orehovo.txt', 'keyboard': await buttons.pervom_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'p-orehovo', 'keyboard': await buttons.pervom_rayon()}
                     },
                     'p-ulu-yul': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'perv' / 'ulu-iul.txt', 'keyboard': await buttons.pervom_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'p-ulu-yul', 'keyboard': await buttons.pervom_rayon()}
                     },
                     's-komsomolsk': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'perv' / 'komsomolsk.txt', 'keyboard': await buttons.pervom_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-komsomolsk', 'keyboard': await buttons.pervom_rayon()}
                     },
                     's-voronovo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'koj' / 'voronovo.txt', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-voronovo', 'keyboard': await buttons.kojev_rayon()}
                     },
                     'kozhevnikovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'koj' / 'kozhevnikovo.txt', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'kozhevnikovskiy', 'keyboard': await buttons.kojev_rayon()}
                     },
                     's-malinovka-kozhevnikovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'koj' / 'malinovka_kozh.txt', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-malinovka-kozhevnikovskiy', 'keyboard': await buttons.kojev_rayon()}
                     },
                     's-novopokrovka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'koj' / 'novopokrovka.txt', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-novopokrovka', 'keyboard': await buttons.kojev_rayon()}
                     },
                     's-pesochnodubrovka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'koj' / 'pesok.txt', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-pesochnodubrovka', 'keyboard': await buttons.kojev_rayon()}
                     },
                     's-staraya-yuvala': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'koj' / 'yuvala.txt', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-staraya-yuvala', 'keyboard': await buttons.kojev_rayon()}
                     },
                     's-urtam': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'koj' / 'urtam.txt', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-urtam', 'keyboard': await buttons.kojev_rayon()}
                     },
                     's-chilino': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'koj' / 'chilino.txt', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-chilino', 'keyboard': await buttons.kojev_rayon()}
                     },
                     's-volodino': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'kriv' / 'volodino.txt', 'keyboard': await buttons.krivosh_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-volodino', 'keyboard': await buttons.krivosh_rayon()}
                     },
                     's-krasnyy-yar': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'kriv' / 'red.txt', 'keyboard': await buttons.krivosh_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-krasnyy-yar', 'keyboard': await buttons.krivosh_rayon()}
                     },
                     'krivosheinskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'kriv' / 'krivosheino.txt', 'keyboard': await buttons.krivosh_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'krivosheinskiy', 'keyboard': await buttons.krivosh_rayon()}
                     },
                     'kolpashevskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'kolp' / 'kolpashevo.txt', 'keyboard': await buttons.kolp_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'kolpashevskiy', 'keyboard': await buttons.kolp_rayon()}
                     },
                     'p-bolshaya-sarovka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'kolp' / 'sarovka.txt', 'keyboard': await buttons.kolp_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'p-bolshaya-sarovka', 'keyboard': await buttons.kolp_rayon()}
                     },
                     's-novoselovo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'kolp' / 'novoselovo.txt', 'keyboard': await buttons.kolp_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-novoselovo', 'keyboard': await buttons.kolp_rayon()}
                     },
                     's-chazhemto': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'kolp' / 'chajemto.txt', 'keyboard': await buttons.kolp_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-chazhemto', 'keyboard': await buttons.kolp_rayon()}
                     },
                     's-mogochino': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'molch' / 'mogochino.txt', 'keyboard': await buttons.molch_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-mogochino', 'keyboard': await buttons.molch_rayon()}
                     },
                     'molchanovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'molch' / 'molchanovo.txt', 'keyboard': await buttons.molch_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'molchanovskiy', 'keyboard': await buttons.molch_rayon()}
                     },
                     's-narga': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'molch' / 'narga.txt', 'keyboard': await buttons.molch_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-narga', 'keyboard': await buttons.molch_rayon()}
                     },
                     's-tungusovo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'molch' / 'tungusovo.txt', 'keyboard': await buttons.molch_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-tungusovo', 'keyboard': await buttons.molch_rayon()}
                     },
                     's-anastasevka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'shegar' / 'anast.txt', 'keyboard': await buttons.shegar_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-anastasevka', 'keyboard': await buttons.shegar_rayon()}
                     },
                     's-batkat': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'shegar' / 'batkat.txt', 'keyboard': await buttons.shegar_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-batkat', 'keyboard': await buttons.shegar_rayon()}
                     },
                     'shegarskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'file': Path('files_gr') / 'shegar' / 'shegarskij.txt', 'keyboard': await buttons.shegar_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'shegarskiy', 'keyboard': await buttons.shegar_rayon()}
                     },
                     's-monastyrka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'shegar' / 'monas.txt', 'keyboard': await buttons.shegar_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-monastyrka', 'keyboard': await buttons.shegar_rayon()}
                     },
                     'p-pobeda': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'shegar' / 'pobeda.txt', 'keyboard': await buttons.shegar_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'p-pobeda', 'keyboard': await buttons.shegar_rayon()}
                     },
                     's-trubachevo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'shegar' / 'trub.txt', 'keyboard': await buttons.shegar_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-trubachevo', 'keyboard': await buttons.shegar_rayon()}
                     },
                     'd-voronino': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'voronino.txt', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'd-voronino', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     'd-kislovka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'kislovka.txt', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'd-kislovka', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     'p-zonalnaya': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'zonalnij.txt', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'p-zonalnaya', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     'p-mirnyy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'mirnij.txt', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'p-mirnyy', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     'p-rassvet': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'rassvet.txt', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 'p-rassvet', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     's-bogashevo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'bogashevo.txt', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-bogashevo', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     's-vershinino': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'vershinino.txt', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-vershinino', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     's-zorkalcevo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'zorkalcevo.txt', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-zorkalcevo', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     's-itatka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'itatka.txt', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-itatka', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     's-kaltay': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'kaltaj.txt', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-kaltay', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     's-kornilovo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'kornilovo.txt', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-kornilovo', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
                     's-malinovka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'malinovka_chul.txt', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-malinovka', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
                     's-mezheninovka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'mezheninovka.txt', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-mezheninovka', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
                     's-novorozhdestvenskoe': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'novorozhdest.txt', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-novorozhdestvenskoe', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
                     's-rybalovo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'ribalovo.txt', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-rybalovo', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
                     's-moryakovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'moryakovskij.txt', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-moryakovskiy', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
                     's-turuntaevo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'turuntaevo.txt', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-turuntaevo', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
                     's-oktyabrskoe': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files_gr') / 'tr' / 'oktyabrskoe.txt', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'photo': payload_data, 'slug': 's-oktyabrskoe', 'keyboard': await buttons.tomsk_rayon_1()}
                     }
                 }
 
