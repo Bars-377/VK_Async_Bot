@@ -1192,16 +1192,6 @@ def process_1():
         # Формируем вывод для всех случаев одинаково
         output = []
 
-        # Заголовок
-        if len(slugs) == 1:
-            output.append("=" * 50)
-            output.append("ИНФОРМАЦИЯ О ФИЛИАЛЕ")
-            output.append("=" * 50)
-        else:
-            output.append("=" * 60)
-            output.append(f"ИНФОРМАЦИЯ ПО {len(slugs)} ФИЛИАЛАМ")
-            output.append("=" * 60)
-
         # Обрабатываем каждый филиал
         for i, slug in enumerate(slugs, 1):
             filial = get_filial_by_slug(slug)
@@ -1236,14 +1226,6 @@ def process_1():
             # Добавляем пустую строку между филиалами
             if i < len(slugs):
                 output.append("")
-
-        # Нижняя граница
-        if len(slugs) == 1:
-            output.append("")
-            output.append("=" * 50)
-        else:
-            output.append("")
-            output.append("=" * 60)
 
         return "\n".join(output)
 

@@ -922,7 +922,7 @@ class buttons:
             cls._add_button(keyboard, "с. Анастасьевка", {"cmd": "s-anastasevka"}, KeyboardButtonColor.POSITIVE)
             cls._add_button(keyboard, "с. Баткат", {"cmd": "s-batkat"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
-            cls._add_button(keyboard, "Шегарский", {"cmd": "meln"}, KeyboardButtonColor.POSITIVE)
+            cls._add_button(keyboard, "Шегарский", {"cmd": "shegarskiy"}, KeyboardButtonColor.POSITIVE)
             cls._add_button(keyboard, "с. Монастырка", {"cmd": "s-monastyrka"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
             cls._add_button(keyboard, "п. Победа", {"cmd": "p-pobeda"}, KeyboardButtonColor.POSITIVE)
