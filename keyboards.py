@@ -807,8 +807,8 @@ class buttons:
     async def kolp_rayon(cls, *args):
         try:
             keyboard = Keyboard(one_time=True, inline=False)
-            cls._add_button(keyboard, "Колпашевский", {"cmd": "kolpashevo"}, KeyboardButtonColor.POSITIVE)
-            cls._add_button(keyboard, "п. Большая Саровка", {"cmd": "bolsh_sar"}, KeyboardButtonColor.POSITIVE)
+            cls._add_button(keyboard, "Колпашевский", {"cmd": "kolpashevskiy"}, KeyboardButtonColor.POSITIVE)
+            cls._add_button(keyboard, "п. Большая Саровка", {"cmd": "p-bolshaya-sarovka"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
             cls._add_button(keyboard, "с. Новоселово", {"cmd": "s-novoselovo"}, KeyboardButtonColor.POSITIVE)
             cls._add_button(keyboard, "с. Чажемто", {"cmd": "s-chazhemto"}, KeyboardButtonColor.POSITIVE)

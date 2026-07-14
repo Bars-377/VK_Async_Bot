@@ -227,7 +227,82 @@ user="root"
 password="enigma1418"
 database="mdtomskbot"
 
+import hashlib
+import json
+from datetime import date
+from typing import Optional
 
+# Класс для управления кешем
+class CacheManager:
+    def __init__(self):
+        self.cache = {}
+        self.cache_date = None
+
+    def _get_today(self):
+        return date.today()
+
+    def _get_cache_key(self, *args, **kwargs):
+        """Создает уникальный ключ для кеша"""
+        key_data = f"{args}{kwargs}".encode('utf-8')
+        return hashlib.md5(key_data).hexdigest()
+
+    def get(self, key):
+        """Получает данные из кеша, если они актуальны"""
+        today = self._get_today()
+
+        # Если дата изменилась - очищаем кеш
+        if self.cache_date != today:
+            self.clear()
+            self.cache_date = today
+            return None
+
+        return self.cache.get(key)
+
+    def set(self, key, value):
+        """Сохраняет данные в кеш"""
+        today = self._get_today()
+
+        if self.cache_date != today:
+            self.clear()
+            self.cache_date = today
+
+        self.cache[key] = value
+
+    def clear(self):
+        """Очищает кеш"""
+        self.cache.clear()
+        logger.info("Cache cleared")
+
+    def get_or_set(self, key, getter_func, *args, **kwargs):
+        """
+        Получает данные из кеша или вызывает функцию для их получения
+        """
+        cached_data = self.get(key)
+        if cached_data is not None:
+            logger.info(f"Cache hit for key: {key}")
+            return cached_data
+
+        logger.info(f"Cache miss for key: {key}, fetching data...")
+        data = getter_func(*args, **kwargs)
+        self.set(key, data)
+        return data
+
+    async def get_or_set_async(self, key, async_getter_func, *args, **kwargs):
+        """
+        Асинхронно получает данные из кеша или вызывает функцию для их получения
+        """
+        cached_data = self.get(key)
+        if cached_data is not None:
+            logger.info(f"Cache hit for key: {key}")
+            return cached_data
+
+        logger.info(f"Cache miss for key: {key}, fetching data asynchronously...")
+        data = await async_getter_func(*args, **kwargs)
+        self.set(key, data)
+        return data
+
+# Создаем глобальный экземпляр менеджера кеша
+cache_manager = CacheManager()
 
 def process_1():
 
@@ -1042,7 +1117,6 @@ def process_1():
 
     @retry_async(max_attempts=3, delay=1)
     async def upload_photo_from_url(url: str, message: Message) -> str:
-
         from vkbottle.tools import PhotoMessageUploader
 
         def get_file_extension_from_url(url: str) -> str:
@@ -1118,13 +1192,31 @@ def process_1():
 
     def get_filials() -> List[Dict[str, Any]]:
         """
-        Получает список всех филиалов из API.
+        Получает список всех филиалов из API (внутренняя функция).
         """
         try:
-            response = requests.get(API_URL, timeout=10)
+            # Добавляем заголовки как у браузера
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Referer': 'https://md.tomsk.ru/',
+                'Origin': 'https://md.tomsk.ru'
+            }
+
+            response = requests.get(API_URL, headers=headers, timeout=10)
             response.raise_for_status()
             data = response.json()
-            return data.get("data", [])
+            filials = data.get("data", [])
+
+            print(f"🔍 Получено {len(filials)} филиалов из API")
+            if filials:
+                for i, f in enumerate(filials[:3]):
+                    print(f"  {i+1}. Slug: '{f.get('slug')}', Название: '{f.get('name')}'")
+
+            return filials
         except (requests.RequestException, ValueError) as e:
             print(f"⚠️ Ошибка при получении данных: {e}")
             return []
@@ -1136,14 +1228,24 @@ def process_1():
         """
         filials = get_filials()
         if not filials:
+            print("❌ Нет данных о филиалах")
             return None
 
         slug_lower = slug.lower().strip()
+        print(f"🔍 Ищем филиал с slug: '{slug_lower}'")
 
+        # Проверяем каждый филиал
         for filial in filials:
-            if filial.get("slug", "").lower() == slug_lower:
+            filial_slug = filial.get("slug", "")
+            print(f"  Проверяем: '{filial_slug}' (нижний регистр: '{filial_slug.lower()}')")
+
+            if filial_slug.lower() == slug_lower:
+                print(f"✅ НАШЛИ! {filial.get('name')}")
                 return filial
 
+        # Если не нашли - показываем все доступные slug
+        all_slugs = [f.get('slug') for f in filials if f.get('slug')]
+        print(f"❌ Не найден. Доступные slug: {all_slugs}")
         return None
 
 
@@ -1287,232 +1389,59 @@ def process_1():
         return "\n".join(output)
 
 
-    # async def cons_payload_data(message, photo=None, keyboard=None, file=None, slug=None, cons=None):
-    #     url_schedule = 'http://172.18.11.104:8001/api/v1/filials/chart/'
+    # Функции для получения данных с кешированием
+    async def get_cached_photo(photo_id: str, message: Message) -> Optional[str]:
+        """
+        Получает фото из кеша или загружает с внешнего источника
+        """
+        url_schedule = 'http://172.18.11.104:8001/api/v1/filials/chart/'
+        cache_key = f"photo_{photo_id}"
 
-    #     cons_message = None
-    #     consultation_info = None
-    #     consultation_index = None
+        try:
+            photo = await cache_manager.get_or_set_async(
+                cache_key,
+                upload_photo_from_url,
+                f"{url_schedule}/{photo_id}",
+                message
+            )
+            return photo
+        except Exception as e:
+            logger.error(f"Error loading photo {photo_id}: {e}")
+            return None
 
-    #     # ====== ПОЛУЧАЕМ КОНСУЛЬТАЦИЮ ПО ИНДЕКСУ ======
-    #     if cons:
-    #         try:
-    #             # Определяем, где передан индекс консультации
-    #             if photo:
-    #                 consultation_index = photo
-    #             elif file:
-    #                 consultation_index = file
+    async def get_cached_text(file_id: str) -> Optional[str]:
+        """
+        Получает текст из кеша или загружает с внешнего источника
+        """
+        cache_key = f"text_{file_id}"
 
-    #             # Если есть индекс, ищем консультацию в store
-    #             if consultation_index:
-    #                 # Проверяем, есть ли такой ключ в store.consultations
-    #                 if consultation_index in store.consultations:
-    #                     consultation_info = store.consultations[consultation_index]
-    #                     logger.info(f"Found consultation by index '{consultation_index}': {consultation_info}")
-    #                 else:
-    #                     # Пробуем найти по частичному совпадению
-    #                     for key, value in store.consultations.items():
-    #                         if consultation_index in key or key in consultation_index:
-    #                             consultation_info = value
-    #                             logger.info(f"Found consultation by partial match: {key}")
-    #                             break
+        try:
+            text = await cache_manager.get_or_set_async(
+                cache_key,
+                read_file,
+                file_id
+            )
+            return text
+        except Exception as e:
+            logger.error(f"Error loading text {file_id}: {e}")
+            return None
 
-    #             # Если нашли консультацию, получаем данные
-    #             if consultation_info:
-    #                 cons_data = consultation_info.get('data', {})
-    #                 cons_message = cons_data.get('message', '')
-    #                 cons_name = consultation_info.get('name', consultation_index)
-    #                 logger.info(f"Consultation found: {cons_name} -> {cons_message[:50]}...")
-    #         except Exception as e:
-    #             logger.error(f"Error retrieving consultation: {e}")
-    #             # Продолжаем выполнение без консультации
+    async def get_cached_filial_info(slug: str) -> Optional[str]:
+        """
+        Получает информацию о филиале из кеша или загружает с внешнего источника
+        """
+        cache_key = f"filial_info_{slug}"
 
-    #     # ====== ОБРАБОТКА В ЗАВИСИМОСТИ ОТ ПАРАМЕТРОВ ======
-
-    #     # СЛУЧАЙ 1: Есть и photo, и slug
-    #     if photo and slug and not isinstance(photo, tuple):
-    #         try:
-    #             ph = await upload_photo_from_url(f"{url_schedule}/{photo}", message)
-    #             info = await get_filial_info_by_slug(slug)  # синхронная функция
-
-    #             return await message.answer(
-    #                 info,
-    #                 keyboard=keyboard,
-    #                 attachment=ph
-    #             )
-    #         except Exception as e:
-    #             logger.error(f"Error in CASE 1 (photo+slug): {e}")
-    #             return await message.answer(
-    #                 "Произошла ошибка при загрузке данных. Попробуйте позже.",
-    #                 keyboard=keyboard
-    #             )
-
-    #     # СЛУЧАЙ 2: Есть и photo, и file
-    #     elif photo and file and not isinstance(photo, tuple):
-    #         try:
-    #             ph = await upload_photo_from_url(f"{url_schedule}/{photo}", message)
-    #             file_content = await read_file(file)
-
-    #             if cons_message:
-    #                 return await message.answer(
-    #                     f"{file_content}\n\n📋 {cons_message}",
-    #                     keyboard=keyboard,
-    #                     attachment=ph
-    #                 )
-
-    #             return await message.answer(
-    #                 file_content,
-    #                 keyboard=keyboard,
-    #                 attachment=ph
-    #             )
-    #         except Exception as e:
-    #             logger.error(f"Error in CASE 2 (photo+file): {e}")
-    #             return await message.answer(
-    #                 "Произошла ошибка при загрузке данных. Попробуйте позже.",
-    #                 keyboard=keyboard
-    #             )
-
-    #     # СЛУЧАЙ 3: Только file
-    #     elif file and not photo:
-    #         try:
-    #             # Если в file передан индекс консультации
-    #             if consultation_info and cons_message:
-    #                 return await message.answer(
-    #                     f"📋 {cons_message}",
-    #                     keyboard=keyboard
-    #                 )
-
-    #             # Иначе читаем файл
-    #             file_content = await read_file(file)
-    #             return await message.answer(
-    #                 file_content,
-    #                 keyboard=keyboard
-    #             )
-    #         except Exception as e:
-    #             logger.error(f"Error in CASE 3 (only file): {e}")
-    #             return await message.answer(
-    #                 "Произошла ошибка при чтении файла. Попробуйте позже.",
-    #                 keyboard=keyboard
-    #             )
-
-    #     # СЛУЧАЙ 4: photo - это кортеж (несколько фото)
-    #     elif isinstance(photo, tuple):
-    #         try:
-    #             # Отправляем все фото
-    #             for i in range(len(photo)-1):
-    #                 ph = await upload_photo_from_url(f"{url_schedule}/{photo[i]}", message)
-    #                 await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
-
-    #             ph = await upload_photo_from_url(f"{url_schedule}/{photo[-1]}", message)
-
-    #             # Если есть консультация, добавляем ее сообщение
-    #             if not file:
-    #                 if cons_message:
-    #                     return await message.answer(
-    #                         f"📋 {cons_message}",
-    #                         keyboard=keyboard,
-    #                         attachment=ph
-    #                     )
-    #                 return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
-    #             else:
-    #                 file_content = await read_file(file)
-    #                 if cons_message:
-    #                     return await message.answer(
-    #                         f"{file_content}\n\n📋 {cons_message}",
-    #                         keyboard=keyboard,
-    #                         attachment=ph
-    #                     )
-    #                 return await message.answer(
-    #                     file_content,
-    #                     keyboard=keyboard,
-    #                     attachment=ph
-    #                 )
-    #         except Exception as e:
-    #             logger.error(f"Error in CASE 4 (tuple photos): {e}")
-    #             return await message.answer(
-    #                 "Произошла ошибка при загрузке изображений. Попробуйте позже.",
-    #                 keyboard=keyboard
-    #             )
-
-    #     # СЛУЧАЙ 5: Только photo
-    #     elif photo and not file:
-    #         try:
-    #             ph = await upload_photo_from_url(f"{url_schedule}/{photo}", message)
-
-    #             if cons_message:
-    #                 return await message.answer(
-    #                     f"📋 {cons_message}",
-    #                     keyboard=keyboard,
-    #                     attachment=ph
-    #                 )
-
-    #             logger.warning(f"Consultation not found for index: {consultation_index}")
-    #             return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
-    #         except Exception as e:
-    #             logger.error(f"Error in CASE 5 (only photo): {e}")
-    #             return await message.answer(
-    #                 "Произошла ошибка при загрузке изображения. Попробуйте позже.",
-    #                 keyboard=keyboard
-    #             )
-
-    #     # СЛУЧАЙ 6: Нет параметров
-    #     else:
-    #         try:
-    #             return await message.answer("Выберите раздел", keyboard=keyboard)
-    #         except Exception as e:
-    #             logger.error(f"Error in CASE 6 (no params): {e}")
-    #             return await message.answer(
-    #                 "Произошла ошибка. Попробуйте позже.",
-    #                 keyboard=keyboard
-    #             )
-
-    import hashlib
-    import json
-    from datetime import date
-    from typing import Optional
-
-    # Класс для управления кешем
-    class CacheManager:
-        def __init__(self):
-            self.cache = {}
-            self.cache_date = None
-
-        def _get_today(self):
-            return date.today()
-
-        def _get_cache_key(self, *args, **kwargs):
-            """Создает уникальный ключ для кеша"""
-            key_data = f"{args}{kwargs}".encode('utf-8')
-            return hashlib.md5(key_data).hexdigest()
-
-        def get(self, key):
-            """Получает данные из кеша, если они актуальны"""
-            today = self._get_today()
-
-            # Если дата изменилась - очищаем кеш
-            if self.cache_date != today:
-                self.clear()
-                self.cache_date = today
-                return None
-
-            return self.cache.get(key)
-
-        def set(self, key, value):
-            """Сохраняет данные в кеш"""
-            today = self._get_today()
-
-            if self.cache_date != today:
-                self.clear()
-                self.cache_date = today
-
-            self.cache[key] = value
-
-        def clear(self):
-            """Очищает кеш"""
-            self.cache.clear()
-
-    # Создаем глобальный экземпляр менеджера кеша
-    cache_manager = CacheManager()
+        try:
+            info = await cache_manager.get_or_set_async(
+                cache_key,
+                get_filial_info_by_slug,
+                slug
+            )
+            return info
+        except Exception as e:
+            logger.error(f"Error loading filial info {slug}: {e}")
+            return None
 
     async def cons_payload_data(message, photo=None, keyboard=None, file=None, slug=None, cons=None):
         url_schedule = 'http://172.18.11.104:8001/api/v1/filials/chart/'
@@ -1532,7 +1461,6 @@ def process_1():
 
                 # Если есть индекс, ищем консультацию в кеше или store
                 if consultation_index:
-                    # Создаем ключ для кеша консультации
                     cons_cache_key = f"consultation_{consultation_index}"
                     cached_cons = cache_manager.get(cons_cache_key)
 
@@ -1543,7 +1471,6 @@ def process_1():
                         # Проверяем store
                         if consultation_index in store.consultations:
                             consultation_info = store.consultations[consultation_index]
-                            # Сохраняем в кеш
                             cache_manager.set(cons_cache_key, consultation_info)
                             logger.info(f"Found consultation by index '{consultation_index}' and cached")
                         else:
@@ -1566,55 +1493,35 @@ def process_1():
 
         # ====== ОБРАБОТКА В ЗАВИСИМОСТИ ОТ ПАРАМЕТРОВ ======
 
-        # Вспомогательная функция для загрузки фото с кешированием
-        async def get_cached_photo(photo_id, message):
-            cache_key = f"photo_{photo_id}"
-            cached_photo = cache_manager.get(cache_key)
-
-            if cached_photo:
-                logger.info(f"Using cached photo: {photo_id}")
-                return cached_photo
-
-            # Загружаем фото
-            ph = await upload_photo_from_url(f"{url_schedule}/{photo_id}", message)
-            cache_manager.set(cache_key, ph)
-            return ph
-
-        # Вспомогательная функция для чтения файла с кешированием
-        async def get_cached_file(file_id):
-            cache_key = f"file_{file_id}"
-            cached_file = cache_manager.get(cache_key)
-
-            if cached_file:
-                logger.info(f"Using cached file: {file_id}")
-                return cached_file
-
-            # Читаем файл
-            file_content = await read_file(file_id)
-            cache_manager.set(cache_key, file_content)
-            return file_content
-
         # СЛУЧАЙ 1: Есть и photo, и slug
         if photo and slug and not isinstance(photo, tuple):
             try:
-                # Получаем информацию о филиале с кешированием
-                filial_cache_key = f"filial_{slug}"
-                cached_filial_info = cache_manager.get(filial_cache_key)
+                # Получаем информацию о филиале из кеша
+                info = await get_cached_filial_info(slug)
 
-                if cached_filial_info:
-                    info = cached_filial_info
-                    logger.info(f"Using cached filial info for: {slug}")
-                else:
-                    info = await get_filial_info_by_slug(slug)  # предполагаем, что функция async
-                    cache_manager.set(filial_cache_key, info)
+                if info is None:
+                    logger.warning(f"Filial info not available for slug: {slug}")
+                    return await message.answer(
+                        "Информация о филиале временно недоступна. Попробуйте позже.",
+                        keyboard=keyboard
+                    )
 
+                # Пытаемся получить фото из кеша
                 ph = await get_cached_photo(photo, message)
 
-                return await message.answer(
-                    info,
-                    keyboard=keyboard,
-                    attachment=ph
-                )
+                # Если фото есть - отправляем с фото, если нет - только текст
+                if ph:
+                    return await message.answer(
+                        info,
+                        keyboard=keyboard,
+                        attachment=ph
+                    )
+                else:
+                    logger.info(f"Photo {photo} not in cache, sending text only")
+                    return await message.answer(
+                        info,
+                        keyboard=keyboard
+                    )
             except Exception as e:
                 logger.error(f"Error in CASE 1 (photo+slug): {e}")
                 return await message.answer(
@@ -1625,30 +1532,43 @@ def process_1():
         # СЛУЧАЙ 2: Есть и photo, и file
         elif photo and file and not isinstance(photo, tuple):
             try:
+                # Получаем текст из кеша
+                file_content = await get_cached_text(file)
+
+                # Получаем фото из кеша
                 ph = await get_cached_photo(photo, message)
-                file_content = await get_cached_file(file)
 
-                # Кешируем финальный текст
-                final_text_key = f"combined_{photo}_{file}_{cons_message}"
-                cached_response = cache_manager.get(final_text_key)
-
+                # Формируем ответ
                 if cons_message:
-                    response_text = f"{file_content}\n\n📋 {cons_message}"
+                    response_text = f"{file_content}\n\n📋 {cons_message}" if file_content else f"📋 {cons_message}"
                 else:
                     response_text = file_content
 
-                # Если нет кеша для всего ответа, отправляем
-                if not cached_response or cached_response != response_text:
+                # Если нет текста, отправляем только фото (если есть)
+                if not file_content and not ph:
+                    return await message.answer(
+                        "Данные временно недоступны. Попробуйте позже.",
+                        keyboard=keyboard
+                    )
+
+                # Отправляем с фото или без
+                if ph and file_content:
                     return await message.answer(
                         response_text,
                         keyboard=keyboard,
                         attachment=ph
                     )
-                else:
+                elif ph and not file_content:
                     return await message.answer(
-                        cached_response,
+                        "ㅤ",
                         keyboard=keyboard,
                         attachment=ph
+                    )
+                else:  # file_content есть, ph нет
+                    logger.info(f"Photo {photo} not in cache, sending text only")
+                    return await message.answer(
+                        response_text,
+                        keyboard=keyboard
                     )
             except Exception as e:
                 logger.error(f"Error in CASE 2 (photo+file): {e}")
@@ -1666,11 +1586,18 @@ def process_1():
                         keyboard=keyboard
                     )
 
-                file_content = await get_cached_file(file)
-                return await message.answer(
-                    file_content,
-                    keyboard=keyboard
-                )
+                file_content = await get_cached_text(file)
+
+                if file_content:
+                    return await message.answer(
+                        file_content,
+                        keyboard=keyboard
+                    )
+                else:
+                    return await message.answer(
+                        "Информация временно недоступна. Попробуйте позже.",
+                        keyboard=keyboard
+                    )
             except Exception as e:
                 logger.error(f"Error in CASE 3 (only file): {e}")
                 return await message.answer(
@@ -1681,34 +1608,71 @@ def process_1():
         # СЛУЧАЙ 4: photo - это кортеж (несколько фото)
         elif isinstance(photo, tuple):
             try:
-                # Отправляем все фото с кешированием
-                for i in range(len(photo)-1):
-                    ph = await get_cached_photo(photo[i], message)
-                    await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+                # Получаем все фото из кеша (по возможности)
+                photos = []
+                for photo_id in photo:
+                    ph = await get_cached_photo(photo_id, message)
+                    if ph:
+                        photos.append(ph)
 
-                ph = await get_cached_photo(photo[-1], message)
+                # Получаем текст, если есть file
+                file_content = None
+                if file:
+                    file_content = await get_cached_text(file)
 
-                if not file:
-                    if cons_message:
-                        return await message.answer(
-                            f"📋 {cons_message}",
-                            keyboard=keyboard,
-                            attachment=ph
-                        )
-                    return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
-                else:
-                    file_content = await get_cached_file(file)
-                    if cons_message:
+                # Если нет ни одного фото и нет текста
+                if not photos and not file_content and not cons_message:
+                    return await message.answer(
+                        "Данные временно недоступны. Попробуйте позже.",
+                        keyboard=keyboard
+                    )
+
+                # Отправляем все доступные фото
+                for i, ph in enumerate(photos):
+                    # Для последнего фото добавляем текст (если есть)
+                    if i == len(photos) - 1:
+                        if file_content and cons_message:
+                            await message.answer(
+                                f"{file_content}\n\n📋 {cons_message}",
+                                keyboard=keyboard,
+                                attachment=ph
+                            )
+                        elif file_content:
+                            await message.answer(
+                                file_content,
+                                keyboard=keyboard,
+                                attachment=ph
+                            )
+                        elif cons_message:
+                            await message.answer(
+                                f"📋 {cons_message}",
+                                keyboard=keyboard,
+                                attachment=ph
+                            )
+                        else:
+                            await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+                    else:
+                        await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+
+                # Если фото нет, но есть текст
+                if not photos and (file_content or cons_message):
+                    if file_content and cons_message:
                         return await message.answer(
                             f"{file_content}\n\n📋 {cons_message}",
-                            keyboard=keyboard,
-                            attachment=ph
+                            keyboard=keyboard
                         )
-                    return await message.answer(
-                        file_content,
-                        keyboard=keyboard,
-                        attachment=ph
-                    )
+                    elif file_content:
+                        return await message.answer(
+                            file_content,
+                            keyboard=keyboard
+                        )
+                    elif cons_message:
+                        return await message.answer(
+                            f"📋 {cons_message}",
+                            keyboard=keyboard
+                        )
+
+                return None
             except Exception as e:
                 logger.error(f"Error in CASE 4 (tuple photos): {e}")
                 return await message.answer(
@@ -1721,15 +1685,27 @@ def process_1():
             try:
                 ph = await get_cached_photo(photo, message)
 
-                if cons_message:
-                    return await message.answer(
-                        f"📋 {cons_message}",
-                        keyboard=keyboard,
-                        attachment=ph
-                    )
-
-                logger.warning(f"Consultation not found for index: {consultation_index}")
-                return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+                if ph:
+                    if cons_message:
+                        return await message.answer(
+                            f"📋 {cons_message}",
+                            keyboard=keyboard,
+                            attachment=ph
+                        )
+                    return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
+                else:
+                    # Фото нет в кеше
+                    if cons_message:
+                        logger.info(f"Photo {photo} not in cache, sending consultation text only")
+                        return await message.answer(
+                            f"📋 {cons_message}",
+                            keyboard=keyboard
+                        )
+                    else:
+                        return await message.answer(
+                            "Изображение временно недоступно. Попробуйте позже.",
+                            keyboard=keyboard
+                        )
             except Exception as e:
                 logger.error(f"Error in CASE 5 (only photo): {e}")
                 return await message.answer(
