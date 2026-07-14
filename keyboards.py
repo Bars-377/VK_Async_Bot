@@ -761,7 +761,7 @@ class buttons:
         try:
             keyboard = Keyboard(one_time=True, inline=False)
             cls._add_button(keyboard, "с. Вороново", {"cmd": "s-voronovo"}, KeyboardButtonColor.POSITIVE)
-            cls._add_button(keyboard, "Кожевниковский", {"cmd": "kojevn"}, KeyboardButtonColor.POSITIVE)
+            cls._add_button(keyboard, "Кожевниковский", {"cmd": "kozhevnikovskiy"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
             cls._add_button(keyboard, "с. Малиновка", {"cmd": "s-malinovka-kozhevnikovskiy"}, KeyboardButtonColor.POSITIVE)
             cls._add_button(keyboard, "с. Новопокровка", {"cmd": "s-novopokrovka"}, KeyboardButtonColor.POSITIVE)
@@ -829,7 +829,7 @@ class buttons:
         try:
             keyboard = Keyboard(one_time=True, inline=False)
             cls._add_button(keyboard, "с. Могочино", {"cmd": "s-mogochino"}, KeyboardButtonColor.POSITIVE)
-            cls._add_button(keyboard, "Молчановский", {"cmd": "molchanovo"}, KeyboardButtonColor.POSITIVE)
+            cls._add_button(keyboard, "Молчановский", {"cmd": "molchanovskiy"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
             cls._add_button(keyboard, "с. Нарга", {"cmd": "s-narga"}, KeyboardButtonColor.POSITIVE)
             cls._add_button(keyboard, "с. Тунгусово", {"cmd": "s-tungusovo"}, KeyboardButtonColor.POSITIVE)
