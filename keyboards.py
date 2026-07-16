@@ -1474,24 +1474,18 @@ class buttons:
             traceback.print_exc()
 
     @classmethod
-    async def cons_zagr_5_10(cls, condition):
+    async def cons_lic(cls, *args):
         try:
             keyboard = Keyboard(one_time=True, inline=False)
-            if condition:
-                cls._add_button(keyboard, "5 лет", {"cmd": "cons_zagr_14_18"}, KeyboardButtonColor.POSITIVE)
-                keyboard.row()
-                # cls._add_button(keyboard, "До 14 лет", {"cmd": "cons_zagr_14"}, KeyboardButtonColor.POSITIVE)
-                # keyboard.row()
-                # cls._add_button(keyboard, "С 18 лет", {"cmd": "cons_zagr_18"}, KeyboardButtonColor.POSITIVE)
-                # keyboard.row()
-            else:
-                cls._add_button(keyboard, "10 лет", {"cmd": "cons_zagr_14_18_10"}, KeyboardButtonColor.POSITIVE)
-                keyboard.row()
-                # cls._add_button(keyboard, "До 14 лет", {"cmd": "cons_zagr_14_10"}, KeyboardButtonColor.POSITIVE)
-                # keyboard.row()
-                # cls._add_button(keyboard, "С 18 лет", {"cmd": "cons_zagr_18_10"}, KeyboardButtonColor.POSITIVE)
-                # keyboard.row()
-            cls._add_button(keyboard, "Назад", {"cmd": "cons_zagr"}, KeyboardButtonColor.NEGATIVE)
+
+            cls._add_button(keyboard, "Юридическое лицо", {"cmd": "licenziya-taksi-ur"}, KeyboardButtonColor.POSITIVE)
+            keyboard.row()
+            cls._add_button(keyboard, "Индивидуальный предприниматель", {"cmd": "licenziya-taksi-ip"}, KeyboardButtonColor.POSITIVE)
+            keyboard.row()
+            cls._add_button(keyboard, "Физическое лицо", {"cmd": "licenziya-taksi"}, KeyboardButtonColor.POSITIVE)
+            keyboard.row()
+
+            cls._add_button(keyboard, "Назад", {"cmd": "cons_other"}, KeyboardButtonColor.NEGATIVE)
             cls._add_button(keyboard, "В главное меню", {"cmd": "menu"}, KeyboardButtonColor.PRIMARY)
             keyboard = keyboard.get_json()
             return keyboard
@@ -1518,9 +1512,9 @@ class buttons:
             # keyboard.row()
             # cls._add_button(keyboard, "Внесение изменений в запись акта", {"cmd": "cons_pasp_akt"}, KeyboardButtonColor.POSITIVE)
             # keyboard.row()
-            cls._add_button(keyboard, "Возраст", {"cmd": "cons_pasp_akt"}, KeyboardButtonColor.POSITIVE)
+            cls._add_button(keyboard, "Исполнилось 14/20/45, смена ФИО", {"cmd": "cons_pasp_akt"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
-            cls._add_button(keyboard, "Смена", {"cmd": "cons_pasp_data"}, KeyboardButtonColor.POSITIVE)
+            cls._add_button(keyboard, "Другая причина", {"cmd": "cons_pasp_data"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
             cls._add_button(keyboard, "Назад", {"cmd": "cons_mvd"}, KeyboardButtonColor.NEGATIVE)
             cls._add_button(keyboard, "В главное меню", {"cmd": "menu"}, KeyboardButtonColor.PRIMARY)
@@ -1541,6 +1535,8 @@ class buttons:
                 cls._add_button(keyboard, "Регистрация гражданина РФ", {"cmd": "cons_grajd_1"}, KeyboardButtonColor.POSITIVE)
                 keyboard.row()
                 cls._add_button(keyboard, "Снятие с регистрационного учёта", {"cmd": "cons_snyat_1"}, KeyboardButtonColor.POSITIVE)
+                keyboard.row()
+                cls._add_button(keyboard, "Миграционный учёт", {"cmd": "migracionnyj-uchet"}, KeyboardButtonColor.POSITIVE)
                 keyboard.row()
             else:
                 cls._add_button(keyboard, "Регистрация брака", {"cmd": "cons_grajd_2"}, KeyboardButtonColor.POSITIVE)
@@ -1569,6 +1565,8 @@ class buttons:
             cls._add_button(keyboard, "Портал Госуслуги.ру", {"cmd": "cons_port"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
             cls._add_button(keyboard, "Лицензия на такси", {"cmd": "cons_lic"}, KeyboardButtonColor.POSITIVE)
+            keyboard.row()
+            cls._add_button(keyboard, "Справки СВО", {"cmd": "cons_gos_key"}, KeyboardButtonColor.POSITIVE)
             keyboard.row()
             cls._add_button(keyboard, "Назад", {"cmd": "consultation"}, KeyboardButtonColor.NEGATIVE)
             cls._add_button(keyboard, "В главное меню", {"cmd": "menu"}, KeyboardButtonColor.PRIMARY)

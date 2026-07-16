@@ -1454,8 +1454,92 @@ def process_1():
             logger.error(f"Error loading filial info {slug}: {e}")
             return None
 
+    # format_data подтверждённо работает и на API v5.199 (проверено рабочим
+    # запросом через requests) — жёсткой привязки к какой-то конкретной
+    # версии нет, отдельно поднимать api_version бота не нужно.
+
+
+    def _fd_kwargs(format_data_json: str | None) -> dict:
+        """Возвращает {'format_data': ...} только если он реально есть,
+        чтобы не слать в VK API пустой/None параметр."""
+        return {"format_data": format_data_json} if format_data_json else {}
+
+
+    def _serialize_keyboard(keyboard):
+        """
+        message.answer() в vkbottle сам сериализует объект Keyboard в JSON
+        перед отправкой. Когда мы идём в обход answer() и дёргаем
+        ctx_api.messages.send() напрямую, эту сериализацию нужно сделать
+        руками, иначе VK получит объект Python вместо JSON-строки.
+        """
+        if keyboard is None:
+            return None
+        if isinstance(keyboard, str):
+            return keyboard
+        # у большинства версий vkbottle Keyboard корректно сериализуется через str()
+        return str(keyboard)
+
+
+    async def send_with_format(message, text: str, format_data_json: str | None = None,
+                                keyboard=None, attachment=None) -> int:
+        """
+        Отправляет сообщение НАПРЯМУЮ через ctx_api.messages.send — так же,
+        как в рабочем примере на requests:
+
+            params = {
+                "access_token": ...,
+                "v": "5.199",
+                "user_id": ...,
+                "message": "...",
+                "format_data": '{"version":1,"items":[...]}',
+                "random_id": 0,
+            }
+            requests.post("https://api.vk.com/method/messages.send", params=params)
+
+        Идём в обход message.answer(), чтобы гарантированно не потерять
+        format_data — на случай, если конкретная версия answer() в
+        установленном vkbottle не прокидывает незнакомые ей kwargs дальше.
+        """
+        kwargs = {
+            "peer_id": message.peer_id,
+            "message": text,
+            "random_id": 0,
+        }
+        if attachment:
+            kwargs["attachment"] = attachment
+        serialized_keyboard = _serialize_keyboard(keyboard)
+        if serialized_keyboard:
+            kwargs["keyboard"] = serialized_keyboard
+        kwargs.update(_fd_kwargs(format_data_json))
+
+        return await message.ctx_api.messages.send(**kwargs)
+
+
+    def build_format_data(format_data: dict | None) -> str | None:
+        """
+        Сериализует format_data в JSON-строку в том виде, который ожидает VK API.
+        Пример входного формата:
+        {
+            "version": 1,
+            "items": [
+                {"offset": 0, "length": 11, "type": "bold", "url": None},
+                {"offset": 453, "length": 44, "type": "underline", "url": None}
+            ]
+        }
+        Возвращает None, если format_data пустой/отсутствует.
+        """
+        if not format_data or not format_data.get("items"):
+            return None
+        return json.dumps(format_data, ensure_ascii=False)
+
+
+    # Внутри процесса process_1(), где уже создан:
+    # bot = Bot(token=config["VKONTAKTE"]["token"])
+
     async def cons_payload_data(message, tag=None, keyboard=None, file=None, slug=None, cons=None):
-        cons_message = None
+        cons_data = None          # <-- ВЕСЬ объект консультации: {"message": ..., "format_data": ...}
+        cons_message = None       # <-- текст для параметра message
+        cons_fd = None            # <-- готовая JSON-строка для параметра format_data
         consultation_info = None
         consultation_index = None
 
@@ -1491,9 +1575,11 @@ def process_1():
                                     logger.info(f"Found consultation by partial match: {key} and cached")
                                     break
 
-                # Если нашли консультацию, получаем данные
+                # Если нашли консультацию — берём и текст, и готовим format_data
                 if consultation_info:
-                    cons_message = consultation_info.get('message', '')
+                    cons_data = consultation_info
+                    cons_message = cons_data.get('message', '')
+                    cons_fd = build_format_data(cons_data.get('format_data'))
                     logger.info(f"Consultation found: {consultation_index} -> {cons_message[:50]}...")
             except Exception as e:
                 logger.error(f"Error retrieving consultation: {e}")
@@ -1501,11 +1587,13 @@ def process_1():
         # ====== ОБРАБОТКА В ЗАВИСИМОСТИ ОТ ПАРАМЕТРОВ ======
 
         # СЛУЧАЙ 1: ТОЛЬКО cons (без tag, file, slug)
-        if cons and cons_message:
+        if cons and cons_data:
             try:
-                logger.info(f"Sending consultation text only: {consultation_index}")
-                return await message.answer(
+                logger.info(f"Sending consultation with format_data: {consultation_index}")
+                return await send_with_format(
+                    message,
                     cons_message,
+                    format_data_json=cons_fd,
                     keyboard=keyboard
                 )
             except Exception as e:
@@ -1551,10 +1639,12 @@ def process_1():
         # СЛУЧАЙ 3: Есть tag и file (и возможно cons)
         elif tag and file:
             try:
-                if cons_message:
+                if cons_data:
                     response_text = cons_message
+                    response_fd = cons_fd
                 else:
                     response_text = await get_cached_text(file)
+                    response_fd = None
 
                 ph = await get_cached_photo(tag, message)
 
@@ -1565,8 +1655,10 @@ def process_1():
                     )
 
                 if ph and response_text:
-                    return await message.answer(
+                    return await send_with_format(
+                        message,
                         response_text,
+                        format_data_json=response_fd,
                         keyboard=keyboard,
                         attachment=ph
                     )
@@ -1578,8 +1670,10 @@ def process_1():
                     )
                 else:  # response_text есть, ph нет
                     logger.info(f"Photo {tag} not in cache, sending text only")
-                    return await message.answer(
+                    return await send_with_format(
+                        message,
                         response_text,
+                        format_data_json=response_fd,
                         keyboard=keyboard
                     )
             except Exception as e:
@@ -1592,9 +1686,11 @@ def process_1():
         # СЛУЧАЙ 4: Только file (или file + cons, без tag)
         elif file and not tag:
             try:
-                if cons_message:
-                    return await message.answer(
+                if cons_data:
+                    return await send_with_format(
+                        message,
                         cons_message,
+                        format_data_json=cons_fd,
                         keyboard=keyboard
                     )
 
@@ -1623,18 +1719,22 @@ def process_1():
                 ph = await get_cached_photo(tag, message)
 
                 if ph:
-                    if cons_message:
-                        return await message.answer(
+                    if cons_data:
+                        return await send_with_format(
+                            message,
                             cons_message,
+                            format_data_json=cons_fd,
                             keyboard=keyboard,
                             attachment=ph
                         )
                     return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
                 else:
-                    if cons_message:
-                        logger.info(f"Photo {tag} not in cache, sending consultation text only")
-                        return await message.answer(
+                    if cons_data:
+                        logger.info(f"Photo {tag} not in cache, sending consultation with format_data")
+                        return await send_with_format(
+                            message,
                             cons_message,
+                            format_data_json=cons_fd,
                             keyboard=keyboard
                         )
                     else:
@@ -1652,8 +1752,8 @@ def process_1():
         # СЛУЧАЙ 6: Нет параметров (или cons без найденного текста)
         else:
             try:
-                # Если cons был передан, но текст не найден
-                if cons and not cons_message:
+                # Если cons был передан, но объект не найден
+                if cons and not cons_data:
                     return await message.answer(
                         f"Консультация '{consultation_index}' не найдена.",
                         keyboard=keyboard
@@ -2287,6 +2387,10 @@ def process_1():
                         'func': cons_payload_data,
                         'args': {'message': message, 'tag': 'voditelskoe-udostoverenie', 'keyboard': await buttons.consultation_mvd(), 'cons': True}
                     },
+                    'cons_gos_key': {
+                        'func': cons_payload_data,
+                        'args': {'message': message, 'tag': 'spravki-svo', 'keyboard': await buttons.consultation_other(), 'cons': True}
+                    },
                     'cons_port': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'tag': 'gosuslugi', 'keyboard': await buttons.consultation_other(), 'cons': True}
@@ -2331,15 +2435,15 @@ def process_1():
                         'func': cons_payload_data,
                         'args': {'message': message, 'keyboard': await buttons.cons_zagr()}
                     },
+                    # 'cons_zagr_5': {
+                    #     'func': cons_payload_data,
+                    #     'args': {'message': message, 'keyboard': await buttons.cons_zagr_5_10(True)}
+                    # },
+                    # 'cons_zagr_10': {
+                    #     'func': cons_payload_data,
+                    #     'args': {'message': message, 'keyboard': await buttons.cons_zagr_5_10(False)}
+                    # },
                     'cons_zagr_5': {
-                        'func': cons_payload_data,
-                        'args': {'message': message, 'keyboard': await buttons.cons_zagr_5_10(True)}
-                    },
-                    'cons_zagr_10': {
-                        'func': cons_payload_data,
-                        'args': {'message': message, 'keyboard': await buttons.cons_zagr_5_10(False)}
-                    },
-                    'cons_zagr_14_18': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'tag': 'zagran-5-let', 'keyboard': await buttons.cons_zagr(), 'cons': True}
                     },
@@ -2351,7 +2455,7 @@ def process_1():
                     #     'func': cons_payload_data,
                     #     'args': {'message': message, 'tag': '', 'keyboard': await buttons.cons_zagr(), 'cons': True}
                     # },
-                    'cons_zagr_14_18_10': {
+                    'cons_zagr_10': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'tag': 'zagran-10-let', 'keyboard': await buttons.cons_zagr(), 'cons': True}
                     },
@@ -2378,6 +2482,10 @@ def process_1():
                     'cons_snyat_1': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'tag': 'reg-uchet-snyatie', 'keyboard': await buttons.consultation_reg_brak(True), 'cons': True}
+                    },
+                    'migracionnyj-uchet': {
+                        'func': cons_payload_data,
+                        'args': {'message': message, 'tag': 'migracionnyj-uchet', 'keyboard': await buttons.consultation_reg_brak(True), 'cons': True}
                     },
                     'cons_brak': {
                         'func': cons_payload_data,
@@ -2433,7 +2541,19 @@ def process_1():
                     },
                     'cons_lic': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'tag': 'licenziya-taksi-ur', 'keyboard': await buttons.consultation_other(), 'cons': True}
+                        'args': {'message': message, 'keyboard': await buttons.cons_lic()}
+                    },
+                    'licenziya-taksi-ur': {
+                        'func': cons_payload_data,
+                        'args': {'message': message, 'tag': 'licenziya-taksi-ur', 'keyboard': await buttons.cons_lic(), 'cons': True}
+                    },
+                    'licenziya-taksi-ip': {
+                        'func': cons_payload_data,
+                        'args': {'message': message, 'tag': 'licenziya-taksi-ip', 'keyboard': await buttons.cons_lic(), 'cons': True}
+                    },
+                    'licenziya-taksi': {
+                        'func': cons_payload_data,
+                        'args': {'message': message, 'tag': 'licenziya-taksi', 'keyboard': await buttons.cons_lic(), 'cons': True}
                     },
                     'cons_pens': {
                         'func': cons_payload_data,
