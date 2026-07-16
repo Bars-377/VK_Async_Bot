@@ -38,6 +38,10 @@ class Store:
 
     def _truncate(self, name: str, data: Any) -> Any:
         """Обработка данных консультации"""
+        # Если data - это строка, оборачиваем в словарь с ключом message
+        if isinstance(data, str):
+            return {"message": data}
+        # Если data уже словарь, возвращаем как есть
         return data
 
     def load_from_cache_sync(self):
@@ -70,40 +74,48 @@ class Store:
         """Подписка на получение консультаций"""
         cache_file = self.cache_file
         try:
-            url = f"{os.environ.get('INTERNAL_API_URL', 'http://172.18.11.104:8001')}/api/v1/shared/subscribe"
+            base_url = os.environ.get('INTERNAL_API_URL', 'http://172.18.11.104:8001')
+            url = f"{base_url}/api/v1/shared/subscribe"
 
-            logger.info(f"Subscribing to: {url}")
+            host = os.environ.get("SELF_HOST", "0.0.0.0")
+            port = int(os.environ.get("SELF_PORT", "8000"))
+            webhook_url = f"http://{host}:{port}{endpoint}"
+
+            logger.info(f"Subscribing to: {url} with webhook: {webhook_url}")
 
             async with session.post(
                 url,
                 json={
-                    "host": os.environ.get("SELF_HOST", "0.0.0.0"),
-                    "port": int(os.environ.get("SELF_PORT", "8000")),
-                    "path": endpoint,
-                    "requester": "max",
+                    "webhook_url": webhook_url,
+                    "platform": "vk",
+                    "resources": []
                 },
                 timeout=aiohttp.ClientTimeout(total=10)
             ) as response:
-                # Исправляем: проверяем статусы 200 и 201
                 if response.status in [200, 201]:
                     consultations_data = await response.json()
                     logger.info(f"Received {len(consultations_data)} consultations from API")
 
-                    consultations = {
-                        c["name"]: self._truncate(c["name"], c["data"])
-                        for c in consultations_data
-                    }
+                    # Исправленный парсинг: используем resource вместо name
+                    consultations = {}
+                    for item in consultations_data:
+                        # Проверяем, что в ответе есть нужные поля
+                        if "resource" in item and "data" in item:
+                            consultations[item["resource"]] = self._truncate(item["resource"], item["data"])
+                        else:
+                            logger.warning(f"Skipping item without 'resource' or 'data': {item}")
+
                     # Сохраняем в кэш
                     with open(cache_file, 'w', encoding='utf-8') as f:
                         json.dump(consultations, f, ensure_ascii=False, indent=2)
 
                     self.consultations = consultations
                     logger.info(f"Subscribed to consultations: {len(consultations)} items")
+                    logger.info(f"Available consultations: {list(consultations.keys())}")
                     return consultations
                 else:
                     error_text = await response.text()
                     logger.error(f"Failed to subscribe: {response.status} - {error_text}")
-                    # Пытаемся загрузить из кэша
                     if await self.load_from_cache():
                         return self.consultations
                     return None
@@ -230,7 +242,6 @@ database="mdtomskbot"
 import hashlib
 import json
 from datetime import date
-from typing import Optional
 
 # Класс для управления кешем
 class CacheManager:
@@ -1443,9 +1454,7 @@ def process_1():
             logger.error(f"Error loading filial info {slug}: {e}")
             return None
 
-    async def cons_payload_data(message, photo=None, keyboard=None, file=None, slug=None, cons=None):
-        url_schedule = 'http://172.18.11.104:8001/api/v1/filials/chart/'
-
+    async def cons_payload_data(message, tag=None, keyboard=None, file=None, slug=None, cons=None):
         cons_message = None
         consultation_info = None
         consultation_index = None
@@ -1454,8 +1463,8 @@ def process_1():
         if cons:
             try:
                 # Определяем, где передан индекс консультации
-                if photo and not isinstance(photo, tuple):
-                    consultation_index = photo
+                if tag and not isinstance(tag, tuple):
+                    consultation_index = tag
                 elif file:
                     consultation_index = file
 
@@ -1484,19 +1493,31 @@ def process_1():
 
                 # Если нашли консультацию, получаем данные
                 if consultation_info:
-                    cons_data = consultation_info.get('data', {})
-                    cons_message = cons_data.get('message', '')
-                    cons_name = consultation_info.get('name', consultation_index)
-                    logger.info(f"Consultation found: {cons_name} -> {cons_message[:50]}...")
+                    cons_message = consultation_info.get('message', '')
+                    logger.info(f"Consultation found: {consultation_index} -> {cons_message[:50]}...")
             except Exception as e:
                 logger.error(f"Error retrieving consultation: {e}")
 
         # ====== ОБРАБОТКА В ЗАВИСИМОСТИ ОТ ПАРАМЕТРОВ ======
 
-        # СЛУЧАЙ 1: Есть и photo, и slug
-        if photo and slug and not isinstance(photo, tuple):
+        # СЛУЧАЙ 1: ТОЛЬКО cons (без tag, file, slug)
+        if cons and cons_message:
             try:
-                # Получаем информацию о филиале из кеша
+                logger.info(f"Sending consultation text only: {consultation_index}")
+                return await message.answer(
+                    cons_message,
+                    keyboard=keyboard
+                )
+            except Exception as e:
+                logger.error(f"Error in CASE 1 (only cons): {e}")
+                return await message.answer(
+                    "Произошла ошибка при отправке консультации. Попробуйте позже.",
+                    keyboard=keyboard
+                )
+
+        # СЛУЧАЙ 2: Есть tag и slug
+        if tag and slug:
+            try:
                 info = await get_cached_filial_info(slug)
 
                 if info is None:
@@ -1506,10 +1527,8 @@ def process_1():
                         keyboard=keyboard
                     )
 
-                # Пытаемся получить фото из кеша
-                ph = await get_cached_photo(photo, message)
+                ph = await get_cached_photo(tag, message)
 
-                # Если фото есть - отправляем с фото, если нет - только текст
                 if ph:
                     return await message.answer(
                         info,
@@ -1517,72 +1536,65 @@ def process_1():
                         attachment=ph
                     )
                 else:
-                    logger.info(f"Photo {photo} not in cache, sending text only")
+                    logger.info(f"Photo {tag} not in cache, sending text only")
                     return await message.answer(
                         info,
                         keyboard=keyboard
                     )
             except Exception as e:
-                logger.error(f"Error in CASE 1 (photo+slug): {e}")
+                logger.error(f"Error in CASE 2 (tag+slug): {e}")
                 return await message.answer(
                     "Произошла ошибка при загрузке данных. Попробуйте позже.",
                     keyboard=keyboard
                 )
 
-        # СЛУЧАЙ 2: Есть и photo, и file
-        elif photo and file and not isinstance(photo, tuple):
+        # СЛУЧАЙ 3: Есть tag и file (и возможно cons)
+        elif tag and file:
             try:
-                # Получаем текст из кеша
-                file_content = await get_cached_text(file)
-
-                # Получаем фото из кеша
-                ph = await get_cached_photo(photo, message)
-
-                # Формируем ответ
                 if cons_message:
-                    response_text = f"{file_content}\n\n📋 {cons_message}" if file_content else f"📋 {cons_message}"
+                    response_text = cons_message
                 else:
-                    response_text = file_content
+                    response_text = await get_cached_text(file)
 
-                # Если нет текста, отправляем только фото (если есть)
-                if not file_content and not ph:
+                ph = await get_cached_photo(tag, message)
+
+                if not response_text and not ph:
                     return await message.answer(
                         "Данные временно недоступны. Попробуйте позже.",
                         keyboard=keyboard
                     )
 
-                # Отправляем с фото или без
-                if ph and file_content:
+                if ph and response_text:
                     return await message.answer(
                         response_text,
                         keyboard=keyboard,
                         attachment=ph
                     )
-                elif ph and not file_content:
+                elif ph and not response_text:
                     return await message.answer(
                         "ㅤ",
                         keyboard=keyboard,
                         attachment=ph
                     )
-                else:  # file_content есть, ph нет
-                    logger.info(f"Photo {photo} not in cache, sending text only")
+                else:  # response_text есть, ph нет
+                    logger.info(f"Photo {tag} not in cache, sending text only")
                     return await message.answer(
                         response_text,
                         keyboard=keyboard
                     )
             except Exception as e:
-                logger.error(f"Error in CASE 2 (photo+file): {e}")
+                logger.error(f"Error in CASE 3 (tag+file): {e}")
                 return await message.answer(
                     "Произошла ошибка при загрузке данных. Попробуйте позже.",
                     keyboard=keyboard
                 )
 
-        # СЛУЧАЙ 3: Только file
-        elif file and not photo:
+        # СЛУЧАЙ 4: Только file (или file + cons, без tag)
+        elif file and not tag:
             try:
-                if consultation_info and cons_message:
+                if cons_message:
                     return await message.answer(
-                        f"📋 {cons_message}",
+                        cons_message,
                         keyboard=keyboard
                     )
 
@@ -1599,106 +1611,30 @@ def process_1():
                         keyboard=keyboard
                     )
             except Exception as e:
-                logger.error(f"Error in CASE 3 (only file): {e}")
+                logger.error(f"Error in CASE 4 (only file): {e}")
                 return await message.answer(
                     "Произошла ошибка при чтении файла. Попробуйте позже.",
                     keyboard=keyboard
                 )
 
-        # СЛУЧАЙ 4: photo - это кортеж (несколько фото)
-        elif isinstance(photo, tuple):
+        # СЛУЧАЙ 5: Только tag (или tag + cons)
+        elif tag and not file:
             try:
-                # Получаем все фото из кеша (по возможности)
-                photos = []
-                for photo_id in photo:
-                    ph = await get_cached_photo(photo_id, message)
-                    if ph:
-                        photos.append(ph)
-
-                # Получаем текст, если есть file
-                file_content = None
-                if file:
-                    file_content = await get_cached_text(file)
-
-                # Если нет ни одного фото и нет текста
-                if not photos and not file_content and not cons_message:
-                    return await message.answer(
-                        "Данные временно недоступны. Попробуйте позже.",
-                        keyboard=keyboard
-                    )
-
-                # Отправляем все доступные фото
-                for i, ph in enumerate(photos):
-                    # Для последнего фото добавляем текст (если есть)
-                    if i == len(photos) - 1:
-                        if file_content and cons_message:
-                            await message.answer(
-                                f"{file_content}\n\n📋 {cons_message}",
-                                keyboard=keyboard,
-                                attachment=ph
-                            )
-                        elif file_content:
-                            await message.answer(
-                                file_content,
-                                keyboard=keyboard,
-                                attachment=ph
-                            )
-                        elif cons_message:
-                            await message.answer(
-                                f"📋 {cons_message}",
-                                keyboard=keyboard,
-                                attachment=ph
-                            )
-                        else:
-                            await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
-                    else:
-                        await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
-
-                # Если фото нет, но есть текст
-                if not photos and (file_content or cons_message):
-                    if file_content and cons_message:
-                        return await message.answer(
-                            f"{file_content}\n\n📋 {cons_message}",
-                            keyboard=keyboard
-                        )
-                    elif file_content:
-                        return await message.answer(
-                            file_content,
-                            keyboard=keyboard
-                        )
-                    elif cons_message:
-                        return await message.answer(
-                            f"📋 {cons_message}",
-                            keyboard=keyboard
-                        )
-
-                return None
-            except Exception as e:
-                logger.error(f"Error in CASE 4 (tuple photos): {e}")
-                return await message.answer(
-                    "Произошла ошибка при загрузке изображений. Попробуйте позже.",
-                    keyboard=keyboard
-                )
-
-        # СЛУЧАЙ 5: Только photo
-        elif photo and not file:
-            try:
-                ph = await get_cached_photo(photo, message)
+                ph = await get_cached_photo(tag, message)
 
                 if ph:
                     if cons_message:
                         return await message.answer(
-                            f"📋 {cons_message}",
+                            cons_message,
                             keyboard=keyboard,
                             attachment=ph
                         )
                     return await message.answer("ㅤ", keyboard=keyboard, attachment=ph)
                 else:
-                    # Фото нет в кеше
                     if cons_message:
-                        logger.info(f"Photo {photo} not in cache, sending consultation text only")
+                        logger.info(f"Photo {tag} not in cache, sending consultation text only")
                         return await message.answer(
-                            f"📋 {cons_message}",
+                            cons_message,
                             keyboard=keyboard
                         )
                     else:
@@ -1707,15 +1643,21 @@ def process_1():
                             keyboard=keyboard
                         )
             except Exception as e:
-                logger.error(f"Error in CASE 5 (only photo): {e}")
+                logger.error(f"Error in CASE 5 (only tag): {e}")
                 return await message.answer(
                     "Произошла ошибка при загрузке изображения. Попробуйте позже.",
                     keyboard=keyboard
                 )
 
-        # СЛУЧАЙ 6: Нет параметров
+        # СЛУЧАЙ 6: Нет параметров (или cons без найденного текста)
         else:
             try:
+                # Если cons был передан, но текст не найден
+                if cons and not cons_message:
+                    return await message.answer(
+                        f"Консультация '{consultation_index}' не найдена.",
+                        keyboard=keyboard
+                    )
                 return await message.answer("Выберите раздел", keyboard=keyboard)
             except Exception as e:
                 logger.error(f"Error in CASE 6 (no params): {e}")
@@ -1889,7 +1831,7 @@ def process_1():
                     },
                     'krivosheinskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'krivosheinskiy', 'keyboard': await buttons.krivosh_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'krivosheinskiy', 'keyboard': await buttons.krivosh_rayon()}
                     },
                     'kolp_rayon': {
                         'func': cons_payload_data,
@@ -1930,264 +1872,264 @@ def process_1():
 
                     'kirovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'kirovskiy', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'kirovskiy', 'keyboard': await buttons.tomsk()}
                     },
 
                     'leninskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'leninskiy', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'leninskiy', 'keyboard': await buttons.tomsk()}
                     },
                     'oktyabrskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'oktyabrskiy', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'oktyabrskiy', 'keyboard': await buttons.tomsk()}
                     },
                     'sovetskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'sovetskiy', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'sovetskiy', 'keyboard': await buttons.tomsk()}
                     },
                     'oez-tvt': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'oez-tvt', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'oez-tvt', 'keyboard': await buttons.tomsk()}
                     },
                     'dom-predprinimatelya': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'dom-predprinimatelya', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'dom-predprinimatelya', 'keyboard': await buttons.tomsk()}
                     },
                     'pao-promsvyazbank': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'pao-promsvyazbank', 'keyboard': await buttons.tomsk()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'pao-promsvyazbank', 'keyboard': await buttons.tomsk()}
                     },
                     'asinovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'asinovskiy', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'asinovskiy', 'keyboard': await buttons.tomsk_obl()}
                     },
                     'g-kedrovyy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'g-kedrovyy', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'g-kedrovyy', 'keyboard': await buttons.tomsk_obl()}
                     },
                     'strezhevoy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'strezhevoy', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'strezhevoy', 'keyboard': await buttons.tomsk_obl()}
                     },
                     'zato-seversk': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'zato-seversk', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'zato-seversk', 'keyboard': await buttons.tomsk_obl()}
                     },
                     'zyryanskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'zyryanskiy', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'zyryanskiy', 'keyboard': await buttons.tomsk_obl()}
                     },
                     'parabel': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'parabel', 'keyboard': await buttons.tomsk_obl()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'parabel', 'keyboard': await buttons.tomsk_obl()}
                     },
                     'verhneketskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'verhneketskiy', 'keyboard': await buttons.tomsk_obl_1()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'verhneketskiy', 'keyboard': await buttons.tomsk_obl_1()}
                     },
                     'aleksandrovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'aleksandrovskiy', 'keyboard': await buttons.tomsk_obl_1()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'aleksandrovskiy', 'keyboard': await buttons.tomsk_obl_1()}
                     },
                     'teguldetskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'teguldetskiy', 'keyboard': await buttons.tomsk_obl_1()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'teguldetskiy', 'keyboard': await buttons.tomsk_obl_1()}
                     },
                     'chainskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'chainskiy', 'keyboard': await buttons.tomsk_obl_1()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'chainskiy', 'keyboard': await buttons.tomsk_obl_1()}
                     },
                     'pervomayskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'pervomayskiy', 'keyboard': await buttons.pervom_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'pervomayskiy', 'keyboard': await buttons.pervom_rayon()}
                     },
                     's-sergeevo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-sergeevo', 'keyboard': await buttons.pervom_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-sergeevo', 'keyboard': await buttons.pervom_rayon()}
                     },
                     'p-orehovo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'p-orehovo', 'keyboard': await buttons.pervom_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'p-orehovo', 'keyboard': await buttons.pervom_rayon()}
                     },
                     'p-ulu-yul': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'p-ulu-yul', 'keyboard': await buttons.pervom_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'p-ulu-yul', 'keyboard': await buttons.pervom_rayon()}
                     },
                     's-komsomolsk': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-komsomolsk', 'keyboard': await buttons.pervom_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-komsomolsk', 'keyboard': await buttons.pervom_rayon()}
                     },
                     's-voronovo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-voronovo', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-voronovo', 'keyboard': await buttons.kojev_rayon()}
                     },
                     'kozhevnikovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'kozhevnikovskiy', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'kozhevnikovskiy', 'keyboard': await buttons.kojev_rayon()}
                     },
                     's-malinovka-kozhevnikovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-malinovka-kozhevnikovskiy', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-malinovka-kozhevnikovskiy', 'keyboard': await buttons.kojev_rayon()}
                     },
                     's-novopokrovka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-novopokrovka', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-novopokrovka', 'keyboard': await buttons.kojev_rayon()}
                     },
                     's-pesochnodubrovka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-pesochnodubrovka', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-pesochnodubrovka', 'keyboard': await buttons.kojev_rayon()}
                     },
                     's-staraya-yuvala': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-staraya-yuvala', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-staraya-yuvala', 'keyboard': await buttons.kojev_rayon()}
                     },
                     's-urtam': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-urtam', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-urtam', 'keyboard': await buttons.kojev_rayon()}
                     },
                     's-chilino': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-chilino', 'keyboard': await buttons.kojev_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-chilino', 'keyboard': await buttons.kojev_rayon()}
                     },
                     's-volodino': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-volodino', 'keyboard': await buttons.krivosh_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-volodino', 'keyboard': await buttons.krivosh_rayon()}
                     },
                     's-krasnyy-yar': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-krasnyy-yar', 'keyboard': await buttons.krivosh_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-krasnyy-yar', 'keyboard': await buttons.krivosh_rayon()}
                     },
                     'krivosheinskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'krivosheinskiy', 'keyboard': await buttons.krivosh_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'krivosheinskiy', 'keyboard': await buttons.krivosh_rayon()}
                     },
                     'kolpashevskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'kolpashevskiy', 'keyboard': await buttons.kolp_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'kolpashevskiy', 'keyboard': await buttons.kolp_rayon()}
                     },
                     'p-bolshaya-sarovka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'p-bolshaya-sarovka', 'keyboard': await buttons.kolp_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'p-bolshaya-sarovka', 'keyboard': await buttons.kolp_rayon()}
                     },
                     's-novoselovo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-novoselovo', 'keyboard': await buttons.kolp_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-novoselovo', 'keyboard': await buttons.kolp_rayon()}
                     },
                     's-chazhemto': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-chazhemto', 'keyboard': await buttons.kolp_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-chazhemto', 'keyboard': await buttons.kolp_rayon()}
                     },
                     's-mogochino': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-mogochino', 'keyboard': await buttons.molch_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-mogochino', 'keyboard': await buttons.molch_rayon()}
                     },
                     'molchanovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'molchanovskiy', 'keyboard': await buttons.molch_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'molchanovskiy', 'keyboard': await buttons.molch_rayon()}
                     },
                     's-narga': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-narga', 'keyboard': await buttons.molch_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-narga', 'keyboard': await buttons.molch_rayon()}
                     },
                     's-tungusovo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-tungusovo', 'keyboard': await buttons.molch_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-tungusovo', 'keyboard': await buttons.molch_rayon()}
                     },
                     's-anastasevka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-anastasevka', 'keyboard': await buttons.shegar_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-anastasevka', 'keyboard': await buttons.shegar_rayon()}
                     },
                     's-batkat': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-batkat', 'keyboard': await buttons.shegar_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-batkat', 'keyboard': await buttons.shegar_rayon()}
                     },
                     'shegarskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'shegarskiy', 'keyboard': await buttons.shegar_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'shegarskiy', 'keyboard': await buttons.shegar_rayon()}
                     },
                     's-monastyrka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-monastyrka', 'keyboard': await buttons.shegar_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-monastyrka', 'keyboard': await buttons.shegar_rayon()}
                     },
                     'p-pobeda': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'p-pobeda', 'keyboard': await buttons.shegar_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'p-pobeda', 'keyboard': await buttons.shegar_rayon()}
                     },
                     's-trubachevo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-trubachevo', 'keyboard': await buttons.shegar_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-trubachevo', 'keyboard': await buttons.shegar_rayon()}
                     },
                     'd-voronino': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'd-voronino', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'd-voronino', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     'd-kislovka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'd-kislovka', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'd-kislovka', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     'p-zonalnaya': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'p-zonalnaya', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'p-zonalnaya', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     'p-mirnyy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'p-mirnyy', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'p-mirnyy', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     'p-rassvet': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 'p-rassvet', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 'p-rassvet', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     's-bogashevo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-bogashevo', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-bogashevo', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     's-vershinino': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-vershinino', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-vershinino', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     's-zorkalcevo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-zorkalcevo', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-zorkalcevo', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     's-itatka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-itatka', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-itatka', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     's-kaltay': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-kaltay', 'keyboard': await buttons.tomsk_rayon()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-kaltay', 'keyboard': await buttons.tomsk_rayon()}
                     },
                     's-kornilovo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-kornilovo', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-kornilovo', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
                     's-malinovka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-malinovka', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-malinovka', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
                     's-mezheninovka': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-mezheninovka', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-mezheninovka', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
                     's-novorozhdestvenskoe': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-novorozhdestvenskoe', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-novorozhdestvenskoe', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
                     's-rybalovo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-rybalovo', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-rybalovo', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
                     's-moryakovskiy': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-moryakovskiy', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-moryakovskiy', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
                     's-turuntaevo': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-turuntaevo', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-turuntaevo', 'keyboard': await buttons.tomsk_rayon_1()}
                     },
                     's-oktyabrskoe': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': payload_data, 'slug': 's-oktyabrskoe', 'keyboard': await buttons.tomsk_rayon_1()}
+                        'args': {'message': message, 'tag': payload_data, 'slug': 's-oktyabrskoe', 'keyboard': await buttons.tomsk_rayon_1()}
                     }
                 }
 
@@ -2343,47 +2285,47 @@ def process_1():
                     },
                     'cons_vod': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239840', 'keyboard': await buttons.consultation_mvd()}
+                        'args': {'message': message, 'tag': 'voditelskoe-udostoverenie', 'keyboard': await buttons.consultation_mvd(), 'cons': True}
                     },
                     'cons_port': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files') / 'gosuslugi.txt', 'keyboard': await buttons.consultation_other()}
+                        'args': {'message': message, 'tag': 'gosuslugi', 'keyboard': await buttons.consultation_other(), 'cons': True}
                     },
                     'cons_pasp': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'keyboard': await buttons.cons_pasp()}
                     },
-                    'cons_pasp_14': {
-                        'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239856', 'keyboard': await buttons.cons_pasp()}
-                    },
-                    'cons_pasp_20': {
-                        'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239855', 'keyboard': await buttons.cons_pasp()}
-                    },
-                    'cons_pasp_vnesh': {
-                        'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239857', 'keyboard': await buttons.cons_pasp()}
-                    },
-                    'cons_pasp_netoch': {
-                        'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239859', 'keyboard': await buttons.cons_pasp()}
-                    },
-                    'cons_pasp_povrej': {
-                        'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239858', 'keyboard': await buttons.cons_pasp()}
-                    },
+                    # 'cons_pasp_14': {
+                    #     'func': cons_payload_data,
+                    #     'args': {'message': message, 'tag': '', 'keyboard': await buttons.cons_pasp(), 'cons': True}
+                    # },
+                    # 'cons_pasp_20': {
+                    #     'func': cons_payload_data,
+                    #     'args': {'message': message, 'tag': '', 'keyboard': await buttons.cons_pasp(), 'cons': True}
+                    # },
+                    # 'cons_pasp_vnesh': {
+                    #     'func': cons_payload_data,
+                    #     'args': {'message': message, 'tag': '', 'keyboard': await buttons.cons_pasp(), 'cons': True}
+                    # },
+                    # 'cons_pasp_netoch': {
+                    #     'func': cons_payload_data,
+                    #     'args': {'message': message, 'tag': '', 'keyboard': await buttons.cons_pasp(), 'cons': True}
+                    # },
+                    # 'cons_pasp_povrej': {
+                    #     'func': cons_payload_data,
+                    #     'args': {'message': message, 'tag': '', 'keyboard': await buttons.cons_pasp(), 'cons': True}
+                    # },
                     'cons_pasp_akt': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239854', 'keyboard': await buttons.cons_pasp()}
+                        'args': {'message': message, 'tag': 'pasport-rf', 'keyboard': await buttons.cons_pasp(), 'cons': True}
                     },
                     'cons_pasp_data': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239860', 'keyboard': await buttons.cons_pasp()}
+                        'args': {'message': message, 'tag': 'pasport-rf-other', 'keyboard': await buttons.cons_pasp(), 'cons': True}
                     },
                     'cons_snils': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files') / 'snils.txt', 'keyboard': await buttons.consultation_snils_inn_oms()}
+                        'args': {'message': message, 'tag': 'snils', 'keyboard': await buttons.consultation_snils_inn_oms(), 'cons': True}
                     },
                     'cons_zagr': {
                         'func': cons_payload_data,
@@ -2399,31 +2341,31 @@ def process_1():
                     },
                     'cons_zagr_14_18': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239820', 'keyboard': await buttons.cons_zagr()}
+                        'args': {'message': message, 'tag': 'zagran-5-let', 'keyboard': await buttons.cons_zagr(), 'cons': True}
                     },
-                    'cons_zagr_14': {
-                        'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239821', 'keyboard': await buttons.cons_zagr()}
-                    },
-                    'cons_zagr_18': {
-                        'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239822', 'keyboard': await buttons.cons_zagr()}
-                    },
+                    # 'cons_zagr_14': {
+                    #     'func': cons_payload_data,
+                    #     'args': {'message': message, 'tag': '', 'keyboard': await buttons.cons_zagr(), 'cons': True}
+                    # },
+                    # 'cons_zagr_18': {
+                    #     'func': cons_payload_data,
+                    #     'args': {'message': message, 'tag': '', 'keyboard': await buttons.cons_zagr(), 'cons': True}
+                    # },
                     'cons_zagr_14_18_10': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239851', 'keyboard': await buttons.cons_zagr()}
+                        'args': {'message': message, 'tag': 'zagran-10-let', 'keyboard': await buttons.cons_zagr(), 'cons': True}
                     },
-                    'cons_zagr_14_10': {
-                        'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239853', 'keyboard': await buttons.cons_zagr()}
-                    },
-                    'cons_zagr_18_10': {
-                        'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239852', 'keyboard': await buttons.cons_zagr()}
-                    },
+                    # 'cons_zagr_14_10': {
+                    #     'func': cons_payload_data,
+                    #     'args': {'message': message, 'tag': '', 'keyboard': await buttons.cons_zagr(), 'cons': True}
+                    # },
+                    # 'cons_zagr_18_10': {
+                    #     'func': cons_payload_data,
+                    #     'args': {'message': message, 'tag': '', 'keyboard': await buttons.cons_zagr(), 'cons': True}
+                    # },
                     'cons_inn': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files') / 'app_inn.txt', 'keyboard': await buttons.consultation_snils_inn_oms()}
+                        'args': {'message': message, 'tag': 'inn', 'keyboard': await buttons.consultation_snils_inn_oms(), 'cons': True}
                     },
                     'cons_reg': {
                         'func': cons_payload_data,
@@ -2431,11 +2373,11 @@ def process_1():
                     },
                     'cons_grajd_1': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': ("photo-224967611_457239833", "photo-224967611_457239846", "photo-224967611_457239863"), 'keyboard': await buttons.consultation_reg_brak(True)}
+                        'args': {'message': message, 'tag': 'reg-uchet', 'keyboard': await buttons.consultation_reg_brak(True), 'cons': True}
                     },
                     'cons_snyat_1': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': ("photo-224967611_457239836", "photo-224967611_457239837"), 'keyboard': await buttons.consultation_reg_brak(True)}
+                        'args': {'message': message, 'tag': 'reg-uchet-snyatie', 'keyboard': await buttons.consultation_reg_brak(True), 'cons': True}
                     },
                     'cons_brak': {
                         'func': cons_payload_data,
@@ -2443,11 +2385,11 @@ def process_1():
                     },
                     'cons_grajd_2': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files') / 'zakl_brak.txt', 'keyboard': await buttons.consultation_reg_brak(False)}
+                        'args': {'message': message, 'tag': 'zags-zaklyuchenie-braka', 'keyboard': await buttons.consultation_reg_brak(False), 'cons': True}
                     },
                     'cons_snyat_2': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files') / 'rastor.txt', 'keyboard': await buttons.consultation_reg_brak(False)}
+                        'args': {'message': message, 'tag': 'zags-rastorzhenie-braka', 'keyboard': await buttons.consultation_reg_brak(False), 'cons': True}
                     },
                     'cons_drug': {
                         'func': cons_payload_data,
@@ -2455,47 +2397,47 @@ def process_1():
                     },
                     'cons_rojd': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files') / 'svid_rojd.txt', 'keyboard': await buttons.consultation_zags()}
+                        'args': {'message': message, 'tag': 'svidetelstvo-o-rozhdenii', 'keyboard': await buttons.consultation_zags(), 'cons': True}
                     },
                     'cons_polis': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files') / 'oms.txt', 'keyboard': await buttons.consultation_snils_inn_oms()}
+                        'args': {'message': message, 'tag': 'oms', 'keyboard': await buttons.consultation_snils_inn_oms(), 'cons': True}
                     },
                     'cons_detsk': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files') / 'det_sad.txt', 'keyboard': await buttons.consultation()}
+                        'args': {'message': message, 'tag': 'detskij-sad', 'keyboard': await buttons.consultation(), 'cons': True}
                     },
                     'cons_sert': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': ('photo-224967611_457239818', 'photo-224967611_457239819'), 'keyboard': await buttons.consultation()}
+                        'args': {'message': message, 'tag': 'gazifikaciya', 'keyboard': await buttons.consultation(), 'cons': True}
                     },
                     'cons_predpr': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files') / 'ip.txt', 'keyboard': await buttons.consultation_other()}
+                        'args': {'message': message, 'tag': 'ip', 'keyboard': await buttons.consultation_other(), 'cons': True}
                     },
                     'cons_mnog': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files') / 'mnogod.txt', 'keyboard': await buttons.consultation()}
+                        'args': {'message': message, 'tag': 'udostoverenie-mnogodetnoj', 'keyboard': await buttons.consultation(), 'cons': True}
                     },
                     'cons_sprav': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': ('photo-224967611_457239838', 'photo-224967611_457239839'), 'keyboard': await buttons.consultation_mvd()}
+                        'args': {'message': message, 'tag': 'spravki-umvd', 'keyboard': await buttons.consultation_mvd(), 'cons': True}
                     },
                     'cons_vipiska': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239861', 'keyboard': await buttons.consultation_other()}
+                        'args': {'message': message, 'tag': 'vypiska-iz-egrn', 'keyboard': await buttons.consultation_other(), 'cons': True}
                     },
                     'cons_edin': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files') / 'edin_posob.txt', 'keyboard': await buttons.consultation()}
+                        'args': {'message': message, 'tag': 'edinoe-posobie', 'keyboard': await buttons.consultation(), 'cons': True}
                     },
                     'cons_lic': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'file': Path('files') / 'taxi.txt', 'keyboard': await buttons.consultation_other()}
+                        'args': {'message': message, 'tag': 'licenziya-taksi-ur', 'keyboard': await buttons.consultation_other(), 'cons': True}
                     },
                     'cons_pens': {
                         'func': cons_payload_data,
-                        'args': {'message': message, 'photo': 'photo-224967611_457239862', 'keyboard': await buttons.consultation()}
+                        'args': {'message': message, 'tag': 'naznachenie-pensii', 'keyboard': await buttons.consultation(), 'cons': True}
                     }
                 }
 
