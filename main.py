@@ -77,9 +77,22 @@ class Store:
             base_url = os.environ.get('INTERNAL_API_URL', 'http://172.18.11.104:8001')
             url = f"{base_url}/api/v1/shared/subscribe"
 
-            host = os.environ.get("SELF_HOST", "0.0.0.0")
+            # СТАЛО
+            bind_host = os.environ.get("SELF_HOST", "0.0.0.0")
             port = int(os.environ.get("SELF_PORT", "8000"))
-            webhook_url = f"http://{host}:{port}{endpoint}"
+
+            # PUBLIC_HOST — реальный IP/домен, по которому внешний API сможет
+            # достучаться до нашего сервера. НЕЛЬЗЯ 0.0.0.0, обычно нельзя и localhost,
+            # если API находится не в той же сети/контейнере.
+            public_host = os.environ.get("PUBLIC_HOST")
+            if not public_host:
+                logger.error(
+                    "PUBLIC_HOST не задан — вебхук будет зарегистрирован на "
+                    f"недостижимый адрес ({bind_host}). Уведомления работать не будут."
+                )
+                public_host = bind_host  # fallback, скорее всего всё ещё сломано
+
+            webhook_url = f"http://{public_host}:{port}{endpoint}"
 
             logger.info(f"Subscribing to: {url} with webhook: {webhook_url}")
 
@@ -137,19 +150,30 @@ def make_update_handler(store_instance: Store):
     async def handle_update(request: web.Request) -> web.Response:
         try:
             data = await request.json()
-            logger.info(f"Received update with {len(data)} items")
         except Exception as e:
             logger.error(f"Invalid JSON in request: {e}")
             return web.Response(status=400)
 
         async with store_instance._lock:
-            # Обновляем данные
+            # Нормализуем к {resource: data}, как и при первичной подписке —
+            # иначе апдейт в "списочном" формате молча ломает store.
+            if isinstance(data, list):
+                normalized = {}
+                for item in data:
+                    if isinstance(item, dict) and "resource" in item and "data" in item:
+                        normalized[item["resource"]] = store_instance._truncate(item["resource"], item["data"])
+                    else:
+                        logger.warning(f"Skipping malformed update item: {item}")
+                data = normalized
+            elif not isinstance(data, dict):
+                logger.error(f"Unexpected update payload type: {type(data)}")
+                return web.Response(status=400)
+
             store_instance.consultations.update(data)
-            # Сохраняем в кэш
             try:
                 with open(store_instance.cache_file, 'w', encoding='utf-8') as f:
                     json.dump(store_instance.consultations, f, ensure_ascii=False, indent=2)
-                logger.info(f"Updated cache with {len(data)} items")
+                logger.info(f"Updated cache with {len(data)} items: {list(data.keys())}")
             except Exception as e:
                 logger.error(f"Error saving cache: {e}")
 
@@ -346,14 +370,27 @@ def process_1():
     store.load_from_cache_sync()
     logger.info(f"Loaded consultations at startup: {len(store.consultations)} items")
 
-    # Запускаем подписку на обновления в отдельном потоке
+    # СТАЛО — внутри process_1(), сразу после:
+    #   store.load_from_cache_sync()
+    #   logger.info(...)
+
+    def start_update_server_in_background():
+        try:
+            run_update_server_in_thread()
+        except Exception as e:
+            logger.error(f"Update server thread crashed: {e}")
+
+    update_server_thread = threading.Thread(
+        target=start_update_server_in_background, daemon=True
+    )
+    update_server_thread.start()
+
     def subscribe_in_background():
         try:
             subscribe_consultations_sync()
         except Exception as e:
             logger.error(f"Error in subscription: {e}")
 
-    # Запускаем подписку в фоновом потоке
     subscription_thread = threading.Thread(target=subscribe_in_background, daemon=True)
     subscription_thread.start()
 
@@ -1543,6 +1580,10 @@ def process_1():
         consultation_info = None
         consultation_index = None
 
+        print('POPAL')
+        print(tag)
+        print(slug)
+
         # ====== ПОЛУЧАЕМ КОНСУЛЬТАЦИЮ ПО ИНДЕКСУ (с кешированием) ======
         if cons:
             try:
@@ -1553,27 +1594,17 @@ def process_1():
                     consultation_index = file
 
                 # Если есть индекс, ищем консультацию в кеше или store
+                # СТАЛО — читаем напрямую из store, без CacheManager
                 if consultation_index:
-                    cons_cache_key = f"consultation_{consultation_index}"
-                    cached_cons = cache_manager.get(cons_cache_key)
-
-                    if cached_cons:
-                        consultation_info = cached_cons
-                        logger.info(f"Using cached consultation for '{consultation_index}'")
+                    if consultation_index in store.consultations:
+                        consultation_info = store.consultations[consultation_index]
+                        logger.info(f"Found consultation by index '{consultation_index}'")
                     else:
-                        # Проверяем store
-                        if consultation_index in store.consultations:
-                            consultation_info = store.consultations[consultation_index]
-                            cache_manager.set(cons_cache_key, consultation_info)
-                            logger.info(f"Found consultation by index '{consultation_index}' and cached")
-                        else:
-                            # Пробуем найти по частичному совпадению
-                            for key, value in store.consultations.items():
-                                if consultation_index in key or key in consultation_index:
-                                    consultation_info = value
-                                    cache_manager.set(cons_cache_key, consultation_info)
-                                    logger.info(f"Found consultation by partial match: {key} and cached")
-                                    break
+                        for key, value in store.consultations.items():
+                            if consultation_index in key or key in consultation_index:
+                                consultation_info = value
+                                logger.info(f"Found consultation by partial match: {key}")
+                                break
 
                 # Если нашли консультацию — берём и текст, и готовим format_data
                 if consultation_info:
