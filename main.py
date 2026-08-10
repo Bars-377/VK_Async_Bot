@@ -248,6 +248,57 @@ from base import *
 config = configparser.ConfigParser()
 config.read("config.ini")
 
+# Общие словари диспетчеризации payload -> обработчик кнопки.
+# Раньше были продублированы по 2-3 раза в разных state-хендлерах
+# (application/department/service и department/filials) с идентичным
+# содержимым — вынесены сюда во избежание рассинхронизации при правках.
+SERVICE_CATEGORY_BUTTONS = {
+    'soc_sphere': buttons.services_social,
+    'nedvij': buttons.services_property,
+    'plant_usl': buttons.services_paid,
+    'konsul': buttons.services_consultation,
+    'serv_section': buttons.services_section,
+    # 'serv_sec_1': buttons.services_section_1,
+    'port_gos': buttons.services_social_1,
+    'vipl_sdel': buttons.services_social_2,
+    'tosp_1': buttons.services_social_3,
+    'tosp_2': buttons.services_social_4,
+    'serv_vipl': buttons.services_vipl
+}
+
+DISTRICT_BUTTONS = {
+    'tomsk_obl_1': buttons.tomsk_obl_1,
+    'tomsk_obl_2': buttons.tomsk_obl_2,
+    'tomsk_obl': buttons.tomsk_obl,
+    'shegar_rayon': buttons.shegar_rayon,
+    'pervom_rayon': buttons.pervom_rayon,
+    'molch_rayon': buttons.molch_rayon,
+    'kolp_rayon': buttons.kolp_rayon,
+    'krivosheinskiy': buttons.krivosh_rayon,
+    'kojev_rayon': buttons.kojev_rayon,
+    'tomsk_rayon': buttons.tomsk_rayon,
+    'tomsk_rayon_1': buttons.tomsk_rayon_1,
+    'tomsk': buttons.tomsk
+}
+
+
+# Регэксп телефона повторялся текстом в нескольких хендлерах — вынесен
+# в константы, значения не менялись (строгий вариант с якорями ^...$
+# и мягкий вариант без якорей — это разные, оба сохранены).
+PATTERN_TELEPHONE_STRICT = r'^(8|\+7)[0-9]{10}$'
+PATTERN_TELEPHONE_LOOSE = r'(8|\+7)[0-9]{10}'
+
+
+def get_first_button_cmd(keyboard: str) -> str:
+    """Достаёт 'cmd' из payload первой кнопки сериализованной клавиатуры.
+
+    Раньше этот же трёхстрочный блок (json.loads + eval) был скопирован
+    в шести местах файла — поведение не менялось, просто вызывается отсюда.
+    """
+    keyboard_data = json.loads(keyboard)
+    payload_value = keyboard_data['buttons'][0][0]['action']['payload']
+    return eval(str(payload_value))['cmd']
+
 from loguru import logger
 
 # Отключаем стандартный логгер vkbottle
@@ -805,19 +856,7 @@ def process_1():
                 if payload_data == None:
                     raise TypeError
 
-                commands_1 = {
-                    'soc_sphere': buttons.services_social,
-                    'nedvij': buttons.services_property,
-                    'plant_usl': buttons.services_paid,
-                    'konsul': buttons.services_consultation,
-                    'serv_section': buttons.services_section,
-                    # 'serv_sec_1': buttons.services_section_1,
-                    'port_gos': buttons.services_social_1,
-                    'vipl_sdel': buttons.services_social_2,
-                    'tosp_1': buttons.services_social_3,
-                    'tosp_2': buttons.services_social_4,
-                    'serv_vipl': buttons.services_vipl
-                }
+                commands_1 = SERVICE_CATEGORY_BUTTONS
 
                 if payload_data in commands_1:
                     function_to_call = commands_1[payload_data]
@@ -854,7 +893,7 @@ def process_1():
 
             except TypeError:
 
-                pattern_telephone = r'(8|\+7)[0-9]{10}'
+                pattern_telephone = PATTERN_TELEPHONE_LOOSE
 
                 if not re.search(pattern_telephone, message.text) and ctx.get(f'{user_id}: contact_application') == 'None':
                     keyboard = await buttons.menu_menu()
@@ -1032,7 +1071,7 @@ def process_1():
 
         try:
             await debug_print('ВХОД В ФУНКЦИЮ phone_input', user_id)
-            pattern_telephone = r'^(8|\+7)[0-9]{10}$'
+            pattern_telephone = PATTERN_TELEPHONE_STRICT
 
             if re.match(pattern_telephone, message.text):
 
@@ -1836,7 +1875,7 @@ def process_1():
                     return await user_verification(user_id, message, users_info)
 
             except TypeError:
-                pattern_telephone = r'^(8|\+7)[0-9]{10}$'
+                pattern_telephone = PATTERN_TELEPHONE_STRICT
                 if re.match(pattern_telephone, message.text):
 
                     answer = await base(user_id = user_id, tel = message.text).phone_input_new()
@@ -2847,7 +2886,7 @@ def process_1():
                 if payload_data == None:
                     raise TypeError
             except TypeError:
-                pattern_telephone = r'^(8|\+7)[0-9]{10}$'
+                pattern_telephone = PATTERN_TELEPHONE_STRICT
                 if re.match(pattern_telephone, message.text):
                     await base(user_id=user_id).base_count('cancel_record')
                     ani = await base(user_id = user_id).phone_select()
@@ -2920,20 +2959,7 @@ def process_1():
 
                 return await user_verification(user_id, message, users_info)
 
-            commands_6 = {
-                'tomsk_obl_1': buttons.tomsk_obl_1,
-                'tomsk_obl_2': buttons.tomsk_obl_2,
-                'tomsk_obl': buttons.tomsk_obl,
-                'shegar_rayon': buttons.shegar_rayon,
-                'pervom_rayon': buttons.pervom_rayon,
-                'molch_rayon': buttons.molch_rayon,
-                'kolp_rayon': buttons.kolp_rayon,
-                'krivosheinskiy': buttons.krivosh_rayon,
-                'kojev_rayon': buttons.kojev_rayon,
-                'tomsk_rayon': buttons.tomsk_rayon,
-                'tomsk_rayon_1': buttons.tomsk_rayon_1,
-                'tomsk': buttons.tomsk
-            }
+            commands_6 = DISTRICT_BUTTONS
 
             # Пример вызова функции по ключу
             if payload_data in commands_6:
@@ -3003,9 +3029,7 @@ def process_1():
 
                 ctx.set(f'{user_id}: event_location', 'tomsk')
                 keyboard = await buttons.events('tomsk')
-                keyboard_data = json.loads(keyboard)
-                payload_value = keyboard_data['buttons'][0][0]['action']['payload']
-                payload = eval(str(payload_value))['cmd']
+                payload = get_first_button_cmd(keyboard)
                 if payload == 'back_1':
                     return await message.answer(loaded_data['43'], keyboard=keyboard)
                 else:
@@ -3184,34 +3208,9 @@ def process_1():
                 keyboard = await buttons.params_1()
                 await message.answer("Назовите количество дел", keyboard=keyboard)
 
-            commands_1 = {
-                'soc_sphere': buttons.services_social,
-                'nedvij': buttons.services_property,
-                'plant_usl': buttons.services_paid,
-                'konsul': buttons.services_consultation,
-                'serv_section': buttons.services_section,
-                # 'serv_sec_1': buttons.services_section_1,
-                'port_gos': buttons.services_social_1,
-                'vipl_sdel': buttons.services_social_2,
-                'tosp_1': buttons.services_social_3,
-                'tosp_2': buttons.services_social_4,
-                'serv_vipl': buttons.services_vipl
-            }
+            commands_1 = SERVICE_CATEGORY_BUTTONS
 
-            commands_2 = {
-                'tomsk_obl_1': buttons.tomsk_obl_1,
-                'tomsk_obl_2': buttons.tomsk_obl_2,
-                'tomsk_obl': buttons.tomsk_obl,
-                'shegar_rayon': buttons.shegar_rayon,
-                'pervom_rayon': buttons.pervom_rayon,
-                'molch_rayon': buttons.molch_rayon,
-                'kolp_rayon': buttons.kolp_rayon,
-                'krivosheinskiy': buttons.krivosh_rayon,
-                'kojev_rayon': buttons.kojev_rayon,
-                'tomsk_rayon': buttons.tomsk_rayon,
-                'tomsk_rayon_1': buttons.tomsk_rayon_1,
-                'tomsk': buttons.tomsk
-            }
+            commands_2 = DISTRICT_BUTTONS
 
             # Пример вызова функции по ключу
             if payload_data in commands_1:
@@ -3643,7 +3642,7 @@ def process_1():
                     return await user_verification(user_id, message, users_info)
             except TypeError:
 
-                pattern_telephone = r'^(8|\+7)[0-9]{10}$'
+                pattern_telephone = PATTERN_TELEPHONE_STRICT
                 if re.match(pattern_telephone, message.text) and counter == 8:
 
                     ctx.set(f'{user_id}: phone', message.text)
@@ -3808,19 +3807,7 @@ def process_1():
                 keyboard = await buttons.menu_menu()
                 return await message.answer(loaded_data['65'], keyboard=keyboard)
 
-            commands_3 = {
-                'soc_sphere': buttons.services_social,
-                'nedvij': buttons.services_property,
-                'plant_usl': buttons.services_paid,
-                'konsul': buttons.services_consultation,
-                'serv_section': buttons.services_section,
-                # 'serv_sec_1': buttons.services_section_1,
-                'port_gos': buttons.services_social_1,
-                'vipl_sdel': buttons.services_social_2,
-                'tosp_1': buttons.services_social_3,
-                'tosp_2': buttons.services_social_4,
-                'serv_vipl': buttons.services_vipl
-            }
+            commands_3 = SERVICE_CATEGORY_BUTTONS
 
             # Пример вызова функции по ключу
             if payload_data in commands_3:
@@ -4217,9 +4204,7 @@ def process_1():
                     print(ctx.get(f'{user_id}: fields'))
                     print('--------------------------------------------')
                     keyboard = await buttons.date_1(*SSR, ctx.get(f'{user_id}: fields'))
-                    keyboard_data = json.loads(keyboard)
-                    payload_value = keyboard_data['buttons'][0][0]['action']['payload']
-                    payload = eval(str(payload_value))['cmd']
+                    payload = get_first_button_cmd(keyboard)
                     if payload == 'menu':
                         return await message.answer(loaded_data['77'], keyboard=keyboard)
                     else:
@@ -4244,9 +4229,7 @@ def process_1():
                     print(ctx.get(f'{user_id}: fields'))
                     print('--------------------------------------------')
                     keyboard = await buttons.date_1(*SSR, ctx.get(f'{user_id}: fields'))
-                    keyboard_data = json.loads(keyboard)
-                    payload_value = keyboard_data['buttons'][0][0]['action']['payload']
-                    payload = eval(str(payload_value))['cmd']
+                    payload = get_first_button_cmd(keyboard)
                     if payload == 'menu':
                         return await message.answer(loaded_data['77'], keyboard=keyboard)
                     else:
@@ -4373,9 +4356,7 @@ def process_1():
                 await bot.state_dispenser.set(message.peer_id, SuperStates.TIME)
                 keyboard, times = await buttons.times_buttons(ctx.get(f'{user_id}: date'), ctx.get(f'{user_id}: time'), *SSR)
                 ctx.set(f'{user_id}: times', times)
-                keyboard_data = json.loads(keyboard)
-                payload_value = keyboard_data['buttons'][0][0]['action']['payload']
-                payload = eval(str(payload_value))['cmd']
+                payload = get_first_button_cmd(keyboard)
                 if payload == 'menu' or payload == 'back':
                     return await message.answer("На эту услугу нет свободного времени", keyboard=keyboard)
                 else:
@@ -4430,9 +4411,7 @@ def process_1():
                 print(ctx.get(f'{user_id}: times'))
                 print('--------------------------------------------')
                 keyboard = await function_to_call(ctx.get(f'{user_id}: times'))
-                keyboard_data = json.loads(keyboard)
-                payload_value = keyboard_data['buttons'][0][0]['action']['payload']
-                payload = eval(str(payload_value))['cmd']
+                payload = get_first_button_cmd(keyboard)
                 if payload == 'menu':
                     return await message.answer("На эту услугу нет свободного времени", keyboard=keyboard)
             else:
@@ -4552,9 +4531,7 @@ def process_1():
                 print(*SSR)
                 print('--------------------------------------------')
                 keyboard = await buttons.date_1(ctx.get(f'{user_id}: date'), ctx.get(f'{user_id}: time'), *SSR)
-                keyboard_data = json.loads(keyboard)
-                payload_value = keyboard_data['buttons'][0][0]['action']['payload']
-                payload = eval(str(payload_value))['cmd']
+                payload = get_first_button_cmd(keyboard)
                 if payload == 'menu':
                     return await message.answer(loaded_data['77'], keyboard=keyboard)
                 else:
@@ -5052,8 +5029,6 @@ def process_4():
         if 'connection' in locals() or 'connection' in globals():
             connection.close()  # Важно закрыть соединение после его использования
 
-import time
-
 # Функция для генерации "случайных" чисел без использования модуля random
 def custom_random():
     current_time = time.time()
@@ -5490,12 +5465,8 @@ def send_vk_worker():
     import requests
     import time
 
-    # Функция для генерации "случайных" чисел без использования модуля random
-    def custom_random():
-        current_time = time.time()
-        seed = int((current_time - int(current_time)) * 10**6)  # Используем миллионные доли секунды в качестве зерна для "случайности"
-        next_number = (1103515245 * seed + 12345) % 2**31  # Простой линейный конгруэнтный генератор
-        return next_number
+    # custom_random() здесь раньше дублировался — используется функция того
+    # же имени и с той же реализацией, объявленная на уровне модуля выше.
 
     def handler():
 
@@ -5633,6 +5604,77 @@ def send_vk_worker():
 from mysql.connector import Error
 from aiohttp import ClientConnectorError  # Импортируем исключение для обработки ошибок соединения
 
+
+def terminate_all_processes(update_server_process, process1, send_vk_process, process2, process8):
+    """Останавливает все дочерние процессы.
+
+    Раньше эта последовательность terminate()/join() была продублирована
+    целиком в двух except-блоках (ClientConnectorError/Error и
+    ConnectionAbortedError) — вынесена сюда без изменения порядка и состава
+    действий. Закомментированные process3..process10 намеренно оставлены
+    как есть (сейчас эти процессы не создаются и не запускаются).
+    """
+    print("Завершение процесса 0...")
+    update_server_process.terminate()  # Принудительное завершение процесса
+    update_server_process.join()  # Ждем завершения процесса
+    print("Процесс 0 был завершен.")
+
+    print("Завершение процесса 1...")
+    process1.terminate()  # Принудительное завершение процесса
+    process1.join()  # Ждем завершения процесса
+    print("Процесс 1 был завершен.")
+
+    print("Завершение процесса send_vk_process...")
+    send_vk_process.terminate()  # Принудительное завершение процесса
+    send_vk_process.join()  # Ждем завершения процесса
+    print("Процесс send_vk_process был завершен.")
+
+    print("Завершение процесса 2...")
+    process2.terminate()  # Принудительное завершение процесса
+    process2.join()  # Ждем завершения процесса
+    print("Процесс 2 был завершен.")
+
+    # print("Завершение процесса 3...")
+    # process3.terminate()  # Принудительное завершение процесса
+    # process3.join()  # Ждем завершения процесса
+    # print("Процесс 3 был завершен.")
+
+    # print("Завершение процесса 4...")
+    # process4.terminate()  # Принудительное завершение процесса
+    # process4.join()  # Ждем завершения процесса
+    # print("Процесс 4 был завершен.")
+
+    # print("Завершение процесса 5...")
+    # process5.terminate()  # Принудительное завершение процесса
+    # process5.join()  # Ждем завершения процесса
+    # print("Процесс 5 был завершен.")
+
+    # print("Завершение процесса 6...")
+    # process6.terminate()  # Принудительное завершение процесса
+    # process6.join()  # Ждем завершения процесса
+    # print("Процесс 6 был завершен.")
+
+    # print("Завершение процесса 7...")
+    # process7.terminate()  # Принудительное завершение процесса
+    # process7.join()  # Ждем завершения процесса
+    # print("Процесс 7 был завершен.")
+
+    print("Завершение процесса 8...")
+    process8.terminate()  # Принудительное завершение процесса
+    process8.join()  # Ждем завершения процесса
+    print("Процесс 8 был завершен.")
+
+    # print("Завершение процесса 9...")
+    # process9.terminate()  # Принудительное завершение процесса
+    # process9.join()  # Ждем завершения процесса
+    # print("Процесс 9 был завершен.")
+
+    # print("Завершение процесса 10...")
+    # process10.terminate()  # Принудительное завершение процесса
+    # process10.join()  # Ждем завершения процесса
+    # print("Процесс 10 был завершен.")
+
+
 if __name__ == "__main__":
     # Запускаем веб-сервер для обновлений в отдельном процессе
     update_server_process = Process(target=run_update_server_in_thread)
@@ -5742,125 +5784,9 @@ if __name__ == "__main__":
                 else:
                     print(f"Ошибка MySQL: {e.errno} - {e.msg}")
 
-            print("Завершение процесса 0...")
-            update_server_process.terminate()  # Принудительное завершение процесса
-            update_server_process.join()  # Ждем завершения процесса
-            print("Процесс 0 был завершен.")
-
-            print("Завершение процесса 1...")
-            process1.terminate()  # Принудительное завершение процесса
-            process1.join()  # Ждем завершения процесса
-            print("Процесс 1 был завершен.")
-
-            print("Завершение процесса send_vk_process...")
-            send_vk_process.terminate()  # Принудительное завершение процесса
-            send_vk_process.join()  # Ждем завершения процесса
-            print("Процесс send_vk_process был завершен.")
-
-            print("Завершение процесса 2...")
-            process2.terminate()  # Принудительное завершение процесса
-            process2.join()  # Ждем завершения процесса
-            print("Процесс 2 был завершен.")
-
-            # print("Завершение процесса 3...")
-            # process3.terminate()  # Принудительное завершение процесса
-            # process3.join()  # Ждем завершения процесса
-            # print("Процесс 3 был завершен.")
-
-            # print("Завершение процесса 4...")
-            # process4.terminate()  # Принудительное завершение процесса
-            # process4.join()  # Ждем завершения процесса
-            # print("Процесс 4 был завершен.")
-
-            # print("Завершение процесса 5...")
-            # process5.terminate()  # Принудительное завершение процесса
-            # process5.join()  # Ждем завершения процесса
-            # print("Процесс 5 был завершен.")
-
-            # print("Завершение процесса 6...")
-            # process6.terminate()  # Принудительное завершение процесса
-            # process6.join()  # Ждем завершения процесса
-            # print("Процесс 6 был завершен.")
-
-            # print("Завершение процесса 7...")
-            # process7.terminate()  # Принудительное завершение процесса
-            # process7.join()  # Ждем завершения процесса
-            # print("Процесс 7 был завершен.")
-
-            print("Завершение процесса 8...")
-            process8.terminate()  # Принудительное завершение процесса
-            process8.join()  # Ждем завершения процесса
-            print("Процесс 8 был завершен.")
-
-            # print("Завершение процесса 9...")
-            # process9.terminate()  # Принудительное завершение процесса
-            # process9.join()  # Ждем завершения процесса
-            # print("Процесс 9 был завершен.")
-
-            # print("Завершение процесса 10...")
-            # process10.terminate()  # Принудительное завершение процесса
-            # process10.join()  # Ждем завершения процесса
-            # print("Процесс 10 был завершен.")
+            terminate_all_processes(update_server_process, process1, send_vk_process, process2, process8)
 
         except ConnectionAbortedError:
             print("Ошибка: Программа на вашем хост-компьютере разорвала установленное подключение")
 
-            print("Завершение процесса 0...")
-            update_server_process.terminate()  # Принудительное завершение процесса
-            update_server_process.join()  # Ждем завершения процесса
-            print("Процесс 0 был завершен.")
-
-            print("Завершение процесса 1...")
-            process1.terminate()  # Принудительное завершение процесса
-            process1.join()  # Ждем завершения процесса
-            print("Процесс 1 был завершен.")
-
-            print("Завершение процесса send_vk_process...")
-            send_vk_process.terminate()  # Принудительное завершение процесса
-            send_vk_process.join()  # Ждем завершения процесса
-            print("Процесс send_vk_process был завершен.")
-
-            print("Завершение процесса 2...")
-            process2.terminate()  # Принудительное завершение процесса
-            process2.join()  # Ждем завершения процесса
-            print("Процесс 2 был завершен.")
-
-            # print("Завершение процесса 3...")
-            # process3.terminate()  # Принудительное завершение процесса
-            # process3.join()  # Ждем завершения процесса
-            # print("Процесс 3 был завершен.")
-
-            # print("Завершение процесса 4...")
-            # process4.terminate()  # Принудительное завершение процесса
-            # process4.join()  # Ждем завершения процесса
-            # print("Процесс 4 был завершен.")
-
-            # print("Завершение процесса 5...")
-            # process5.terminate()  # Принудительное завершение процесса
-            # process5.join()  # Ждем завершения процесса
-            # print("Процесс 5 был завершен.")
-
-            # print("Завершение процесса 6...")
-            # process6.terminate()  # Принудительное завершение процесса
-            # process6.join()  # Ждем завершения процесса
-            # print("Процесс 6 был завершен.")
-
-            # print("Завершение процесса 7...")
-            # process7.terminate()  # Принудительное завершение процесса
-            # process7.join()  # Ждем завершения процесса
-            # print("Процесс 7 был завершен.")
-
-            print("Завершение процесса 8...")
-            process8.terminate()  # Принудительное завершение процесса
-            process8.join()  # Ждем завершения процесса
-            print("Процесс 8 был завершен.")
-
-            # print("Завершение процесса 9...")
-            # process9.terminate()  # Принудительное завершение процесса
-            # process9.join()  # Ждем завершения процесса
-            # print("Процесс 9 был завершен.")
-
-            # print("Завершение процесса 10...")
-            # process10.terminate()  # Принудительное завершение процесса
-            # process10.join()  # Ждем завершения процесса
-            # print("Процесс 10 был завершен.")
+            terminate_all_processes(update_server_process, process1, send_vk_process, process2, process8)
