@@ -425,16 +425,16 @@ def process_1():
     #   store.load_from_cache_sync()
     #   logger.info(...)
 
-    def start_update_server_in_background():
-        try:
-            run_update_server_in_thread()
-        except Exception as e:
-            logger.error(f"Update server thread crashed: {e}")
+    # def start_update_server_in_background():
+    #     try:
+    #         run_update_server_in_thread()
+    #     except Exception as e:
+    #         logger.error(f"Update server thread crashed: {e}")
 
-    update_server_thread = threading.Thread(
-        target=start_update_server_in_background, daemon=True
-    )
-    update_server_thread.start()
+    # update_server_thread = threading.Thread(
+    #     target=start_update_server_in_background, daemon=True
+    # )
+    # update_server_thread.start()
 
     def subscribe_in_background():
         try:
@@ -1009,8 +1009,20 @@ def process_1():
                     return await user_verification(user_id, message, users_info)
 
             except TypeError:
-                pattern_number = r'\d{7}'
-                if re.match(pattern_number, message.text):
+
+                def validate_code(code):
+                    pattern = r'^\d{2}/\d{4}/\d{3,}$'  # 2 цифры / 4 цифры / 3 и более цифр
+                    return bool(re.match(pattern, code))
+
+                message.text = message.text.replace(' ', '')
+
+                if message.text.isdigit() and len(message.text) >= 9:
+                    # Формат: первые 2 цифры / следующие 4 цифры / остальные цифры
+                    # Пример: 862026309 -> 86/2026/309
+                    message.text = f"{message.text[:2]}/{message.text[2:6]}/{message.text[6:]}"
+
+                if message.text.isdigit() or validate_code(message.text):
+
                     answer = await base.readiness_status(message.text)
 
                     if answer['code'] == 'error' or answer['code'] == 'not_found':
@@ -1020,7 +1032,7 @@ def process_1():
                         keyboard = await buttons.menu_menu()
                         return await message.answer(loaded_data['24'], keyboard=keyboard)
                     keyboard = await buttons.menu_menu()
-                    return await message.answer(f"Ваше заявление найдено, документы по номеру заявления {answer['caseNumberSpell']}, состоят в статусе - {answer['status_rus']}", keyboard=keyboard)
+                    return await message.answer(f"Ваше заявление найдено, документы по номеру заявления {message.text}, состоят в статусе - {answer['status']}, в {answer['address']}", keyboard=keyboard)
                 else:
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['13'], keyboard=keyboard)
