@@ -175,11 +175,16 @@ class base:
         self.field_7 = field_7
 
     async def readiness_status(*args):
+
         try:
             status_url_1 = "https://ais.mfc.tomsk.ru/api/external/request?id={}"
             status_url_2 = "https://ais.mfc.tomsk.ru/api/external/request-info?id={}"
 
-            caseNumber = args[0] if args else ""
+            # caseNumber = args[0] if args else ""
+
+            # Убираем self/base из args, если функция была вызвана как self.readiness_status(...)
+            real_args = [a for a in args if not isinstance(a, base)]
+            caseNumber = real_args[0] if real_args else ""
 
             import re
             import requests
@@ -1498,24 +1503,36 @@ class base:
             traceback.print_exc()
 
     async def search_cpgu_order(self, order_number):
+
         try:
 
-            SSR_AIS = ('10.200.50.13', "toma_reader", '49<tcBifCrjPz,', "cpgu")
+            # SSR_AIS = ('10.200.50.13', "toma_reader", '49<tcBifCrjPz,', "cpgu")
 
-            db = Database_PostgreSQL(*SSR_AIS)
-            await db.connect()
+            # db = Database_PostgreSQL(*SSR_AIS)
+            # await db.connect()
 
-            result = await db.search(
-                'DATE(order_date) AS order_date',
-                'public.cpgu_order',
-                'order_number = $1',
-                params=[str(order_number)],
-                one=True
-            )
+            # result = await db.search(
+            #     'DATE(order_date) AS order_date',
+            #     'public.cpgu_order',
+            #     'order_number = $1',
+            #     params=[str(order_number)],
+            #     one=True
+            # )
 
-            await db.close()
+            # await db.close()
 
-            return result['order_date'] if result else None
+            # return result['order_date'] if result else None
+
+            result = await self.readiness_status(str(order_number))
+
+            # readiness_status возвращает dict:
+            #   {"code": "found",    "status": ..., "address": ...}
+            #   {"code": "operator", "status": "",  "address": ""}
+            #   {"code": "error",    "status": ""}
+            # if not result or not isinstance(result, dict):
+            #     return False
+
+            return result.get("code") == "found"
 
         except Exception as e:
             # Вывод подробной информации об ошибке
