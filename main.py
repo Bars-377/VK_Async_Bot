@@ -2181,10 +2181,6 @@ def process_1():
                         'func': cons_payload_data,
                         'args': {'message': message, 'tag': payload_data, 'slug': 's-krasnyy-yar', 'keyboard': await buttons.krivosh_rayon()}
                     },
-                    'krivosheinskiy': {
-                        'func': cons_payload_data,
-                        'args': {'message': message, 'tag': payload_data, 'slug': 'krivosheinskiy', 'keyboard': await buttons.krivosh_rayon()}
-                    },
                     'kolpashevskiy': {
                         'func': cons_payload_data,
                         'args': {'message': message, 'tag': payload_data, 'slug': 'kolpashevskiy', 'keyboard': await buttons.kolp_rayon()}
@@ -5234,7 +5230,7 @@ def send_telegram_message(ani, talon, time, date, department, service):
     )
 
 
-def send_vk_message(user_id, talon, time, date, department, service):
+def send_vk_message(user_id, talon, time, date, department, service, uuid):
     from datetime import datetime
     access_token = config["VKONTAKTE"]["token"]
     api_version = "5.199"
@@ -5376,7 +5372,7 @@ def process_2():
     now = datetime.now()
     date_now = now + timedelta(hours=24)
     date_formatted = date_now.strftime("%Y-%m-%d")
-    server = "https://equeue.mfc.tomsk.ru"
+    server = "http://172.18.11.104:8010"
 
     try:
         with mysql.connector.connect(
@@ -5397,7 +5393,7 @@ def process_2():
                 if x[3] == date_formatted and x[9] != 'yes' and x[6]:
                     talon = requests.get(
                         f"{server}/rest/booking",
-                        params={'uuid': x[6]},
+                        params={'name': '%', 'phone': x[7]},
                         timeout=(5, 8)
                     ).json()
 
@@ -5421,12 +5417,12 @@ def process_2():
                 if x[3] == date_formatted and x[9] != 'yes' and x[6]:
                     talon = requests.get(
                         f"{server}/rest/booking",
-                        params={'uuid': x[6]},
+                        params={'name': '%', 'phone': x[7]},
                         timeout=(5, 8)
                     ).json()
 
                     if talon['data']:
-                        send_vk_message(x[0], x[1], x[2], x[3], x[4], x[5])
+                        send_vk_message(x[0], x[1], x[2], x[3], x[4], x[5], x[6])
                         cursor.execute(
                             "UPDATE vkontakte_reg SET now = %s WHERE sender = %s AND date = %s",
                             ('yes', x[0], x[3])
@@ -5475,7 +5471,6 @@ def process_2_scheduler():
 def send_vk_worker():
     import mysql.connector
     import requests
-    import time
 
     # custom_random() здесь раньше дублировался — используется функция того
     # же имени и с той же реализацией, объявленная на уровне модуля выше.

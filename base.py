@@ -1682,10 +1682,6 @@ class base:
                 'esiaid': esiaid
             }
 
-            for talon in talons_all:
-                if talon["id"] == talon_id:
-                    prms_1 = talon
-
             response = requests.post(server + "/rest/booking/" + talon_id + "/delete/" + esiaid, params=prms, timeout=(2, 5)).json()
             res = response['success']
 
@@ -1696,18 +1692,23 @@ class base:
                     db = Database(*SSR)
                     await db.connect()
 
-                    try:
-                        api = "http://172.18.11.104:8001/api/v1"
-                        requests.delete(
-                        api + '/bookings',
-                        json={
-                            "response_data": prms_1,
-                            "origin": "VK",
-                        },
-                        timeout=3
-                        )
-                    except requests.RequestException:
-                        pass
+                    if talons_all:
+                        for talon in talons_all:
+                            if talon["id"] == talon_id:
+                                prms_1 = talon
+
+                        try:
+                            api = "http://172.18.11.104:8001/api/v1"
+                            requests.delete(
+                            api + '/bookings',
+                            json={
+                                "response_data": prms_1,
+                                "origin": "VK",
+                            },
+                            timeout=3
+                            )
+                        except requests.RequestException:
+                            pass
 
                     await db.delete('vkontakte_reg', f'sender = "{self.user_id}" AND date ="{date}" AND talon = "{talon}" AND department = "{department}"')
 
