@@ -4065,6 +4065,12 @@ def process_1():
                     ctx.set(f'{user_id}: field_2', payload_data)
                     keyboard = await buttons.yes_no()
                     await message.answer("Необходимо составить договор купли-продажи", keyboard=keyboard)
+
+                elif service_id == 'cde2fc0c-98b0-4d1b-80fe-91f4828a9b80' and field_2 == 'None':
+                    ctx.set(f'{user_id}: field_2', payload_data)
+                    keyboard = await buttons.yes_no()
+                    await message.answer("В семье более 3 и более детей?", keyboard=keyboard)
+
                 elif service_id in ('2a5f23a5-4ac1-4a51-9e75-9556137dc8cd') and field_3 == 'None':
                     ctx.set(f'{user_id}: field_3', payload_data)
                     keyboard = await buttons.yes_no()
@@ -4121,6 +4127,7 @@ def process_1():
                             "casecount": int(field_1),
                             "fields":
                             {
+                                "В семье более 3 и более детей?": field_2,
                                 "Хочу оформить доставку готового результата домой/в офис (от 650 руб)": field_5
                             }
                         }
@@ -5095,10 +5102,6 @@ def process_3():
 
     bot.run_forever()
 
-def process_6():
-    import calendars
-    calendars.process_calendar()
-
 # def process_7():
 #     import mail
 #     mail.process_mail()
@@ -5695,7 +5698,7 @@ if __name__ == "__main__":
     # process3 = Process(target=process_3) # НЕ НУЖНО
     # process4 = Process(target=process_4) # НЕ НУЖНО
     # process5 = Process(target=process_5) # НЕ НУЖНО
-    # process6 = Process(target=process_6) # НЕ НУЖНО
+
     # process7 = Process(target=process_7) # НЕ НУЖНО
     process8 = Process(target=process_8)
     # process9 = Process(target=process_9) # НЕ НУЖНО
@@ -5759,10 +5762,6 @@ if __name__ == "__main__":
             #     process5 = Process(target=process_5)
             #     process5.start()
             #     # process5.join()
-            # elif not process6.is_alive():
-            #     process6 = Process(target=process_6)
-            #     process6.start()
-            #     # process6.join()
             # elif not process7.is_alive():
             #     process7 = Process(target=process_7)
             #     process7.start()
