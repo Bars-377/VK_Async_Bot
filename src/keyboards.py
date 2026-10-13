@@ -1,7 +1,10 @@
 from vkbottle import Keyboard, KeyboardButtonColor, Text
-from base import *
+from .base import Base
 import json
 import datetime
+import traceback
+import time
+import requests
 
 tomsk_district = ('395', '491', '443', '401', '539',
 '575', '437', '479', '383', '329', '419', '599', '731',
@@ -48,7 +51,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -67,7 +70,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -119,7 +122,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -146,7 +149,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -176,7 +179,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -210,7 +213,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -233,7 +236,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -260,7 +263,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -278,7 +281,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -317,7 +320,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -344,7 +347,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -365,7 +368,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -395,7 +398,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -420,7 +423,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -444,7 +447,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -468,7 +471,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -490,7 +493,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -512,7 +515,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -540,7 +543,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -560,7 +563,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -580,14 +583,14 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
     @classmethod
     async def times_buttons(cls, date, time, department, service, fields_s):
         try:
-            times = await base().base_get_date_and_time(date, time, department, service, fields_s, True)
+            times = await Base().base_get_date_and_time(date, time, department, service, fields_s, True)
 
             keyboard = Keyboard(one_time=True, inline=False)
             counter = 0
@@ -640,7 +643,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -665,7 +668,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -691,7 +694,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -725,7 +728,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -752,7 +755,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -779,7 +782,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -799,7 +802,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -820,7 +823,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -841,7 +844,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -864,7 +867,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -887,7 +890,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -911,7 +914,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -935,7 +938,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -958,7 +961,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -979,7 +982,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1000,7 +1003,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1021,7 +1024,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1044,7 +1047,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1074,7 +1077,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1092,7 +1095,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1110,7 +1113,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1128,7 +1131,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1145,7 +1148,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1162,7 +1165,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1177,7 +1180,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1289,8 +1292,7 @@ class buttons:
                 ]
             }
 
-            import time
-            import requests
+
 
             access_token = (args,)[0][1]
             peer_id = (args,)[0][0]
@@ -1318,14 +1320,14 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
     @classmethod
     async def events(cls, location):
         try:
-            dates = await base().base_get_events_dates('tomsk')
+            dates = await Base().base_get_events_dates('tomsk')
 
             keyboard = Keyboard(one_time=True, inline=False)
             counter = 0
@@ -1352,7 +1354,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1385,7 +1387,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1410,7 +1412,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1431,7 +1433,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1450,7 +1452,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1469,7 +1471,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1492,7 +1494,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1523,7 +1525,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1550,7 +1552,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1575,7 +1577,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1590,7 +1592,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1616,7 +1618,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1633,7 +1635,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1652,7 +1654,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1669,7 +1671,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1686,7 +1688,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1715,7 +1717,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1732,14 +1734,14 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
     @classmethod
     async def date_1(cls, date, time, department, service, fields_s):
         try:
-            dates = await base().base_get_date_and_time(date, time, department, service, fields_s, True)
+            dates = await Base().base_get_date_and_time(date, time, department, service, fields_s, True)
             keyboard = Keyboard(one_time=True, inline=False)
 
             if isinstance(dates, tuple) and not dates[0].get('success', True):
@@ -1788,14 +1790,14 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
     @classmethod
     async def date_2(cls, date, time, department, service, fields_s):
         try:
-            dates = await base().base_get_date_and_time(date, time, department, service, fields_s, False)
+            dates = await Base().base_get_date_and_time(date, time, department, service, fields_s, False)
             keyboard = Keyboard(one_time=True, inline=False)
 
             if isinstance(dates, tuple) and not dates[0].get('success', True):
@@ -1842,7 +1844,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1901,7 +1903,7 @@ class buttons:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 

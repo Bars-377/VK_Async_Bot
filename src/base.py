@@ -5,6 +5,9 @@ import functools
 import datetime
 import ast
 import requests
+import asyncpg
+import re
+import traceback
 
 cache = {}
 
@@ -124,8 +127,6 @@ class Database:
             self.connection.close()
             print("Соединение с базой данных закрыто.")
 
-import asyncpg
-
 class Database_PostgreSQL:
     def __init__(self, host, user, password, database):
         self.host = host
@@ -151,7 +152,7 @@ class Database_PostgreSQL:
     async def close(self):
         await self.connection.close()
 
-class base:
+class Base:
     def __init__(self, user_id = None, filial = None, fio = None, tel = None, usluga = None, time = None, date = None, fields = None, \
         field_1 = None, field_2 = None, field_3 = None, field_4 = None, field_5 = None, field_6 = None, field_7 = None):
         self.user_id = user_id
@@ -183,11 +184,8 @@ class base:
             # caseNumber = args[0] if args else ""
 
             # Убираем self/base из args, если функция была вызвана как self.readiness_status(...)
-            real_args = [a for a in args if not isinstance(a, base)]
+            real_args = [a for a in args if not isinstance(a, Base)]
             caseNumber = real_args[0] if real_args else ""
-
-            import re
-            import requests
 
             def validate_code(code):
                 pattern = r'^\d{2}/\d{4}/\d{3,}$'
@@ -252,7 +250,7 @@ class base:
         except Exception as e:
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
             result = {"code": "error", "status": ""}
@@ -381,7 +379,7 @@ class base:
     #         # Вывод подробной информации об ошибке
     #         print(f"Поймано исключение: {type(e).__name__}")
     #         print(f"Сообщение об ошибке: {str(e)}")
-    #         import traceback
+    #
     #         print("Трассировка стека (stack trace):")
     #         traceback.print_exc()
 
@@ -840,7 +838,7 @@ class base:
     #         # Вывод подробной информации об ошибке
     #         print(f"Поймано исключение: {type(e).__name__}")
     #         print(f"Сообщение об ошибке: {str(e)}")
-    #         import traceback
+    #
     #         print("Трассировка стека (stack trace):")
     #         traceback.print_exc()
 
@@ -874,18 +872,18 @@ class base:
         h = key[-1]
 
         for text in list_based_questions:
-            h = await base.caches_processing(text, h)
+            h = await Base.caches_processing(text, h)
 
-        # h = await base.caches_processing('aa50aae2-8879-4945-9553-825e911fc9c4', h)
-        # h = await base.caches_processing('b1a8f2ae-3a16-4018-ad69-0a843e61796c', h)
-        # h = await base.caches_processing('667a73c2-e026-483d-8033-1caadcea8f99', h)
-        # h = await base.caches_processing('fbc884bf-b18b-4591-8f4d-fd229b9dc11d', h)
-        # h = await base.caches_processing('48b24708-ad36-4aa7-9772-17940e7741c8', h)
-        # h = await base.caches_processing('cf535155-7337-4310-84d5-3e6e720bf36e', h)
-        # h = await base.caches_processing('56ed2b59-2293-42c7-8493-46d30cfebdf6', h)
-        # h = await base.caches_processing('4b2ab9f4-f1b2-4b41-8e1b-fd719bd797b3', h)
-        # h = await base.caches_processing('64be467d-5881-416e-be81-fc697334b6e4', h)
-        # h = await base.caches_processing('541f0b86-f354-40ae-b2cc-71b091929e31', h)
+        # h = await Base.caches_processing('aa50aae2-8879-4945-9553-825e911fc9c4', h)
+        # h = await Base.caches_processing('b1a8f2ae-3a16-4018-ad69-0a843e61796c', h)
+        # h = await Base.caches_processing('667a73c2-e026-483d-8033-1caadcea8f99', h)
+        # h = await Base.caches_processing('fbc884bf-b18b-4591-8f4d-fd229b9dc11d', h)
+        # h = await Base.caches_processing('48b24708-ad36-4aa7-9772-17940e7741c8', h)
+        # h = await Base.caches_processing('cf535155-7337-4310-84d5-3e6e720bf36e', h)
+        # h = await Base.caches_processing('56ed2b59-2293-42c7-8493-46d30cfebdf6', h)
+        # h = await Base.caches_processing('4b2ab9f4-f1b2-4b41-8e1b-fd719bd797b3', h)
+        # h = await Base.caches_processing('64be467d-5881-416e-be81-fc697334b6e4', h)
+        # h = await Base.caches_processing('541f0b86-f354-40ae-b2cc-71b091929e31', h)
 
         fields = h
         key_1 = ('None', 'None', key[2], key[3], fields)
@@ -919,7 +917,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -989,18 +987,18 @@ class base:
                     h = key[-1]
 
                     for text in list_based_questions:
-                        h = await base.caches_processing(text, h)
+                        h = await Base.caches_processing(text, h)
 
-                    # h = await base.caches_processing('aa50aae2-8879-4945-9553-825e911fc9c4', h)
-                    # h = await base.caches_processing('b1a8f2ae-3a16-4018-ad69-0a843e61796c', h)
-                    # h = await base.caches_processing('667a73c2-e026-483d-8033-1caadcea8f99', h)
-                    # h = await base.caches_processing('fbc884bf-b18b-4591-8f4d-fd229b9dc11d', h)
-                    # h = await base.caches_processing('48b24708-ad36-4aa7-9772-17940e7741c8', h)
-                    # h = await base.caches_processing('cf535155-7337-4310-84d5-3e6e720bf36e', h)
-                    # h = await base.caches_processing('56ed2b59-2293-42c7-8493-46d30cfebdf6', h)
-                    # h = await base.caches_processing('4b2ab9f4-f1b2-4b41-8e1b-fd719bd797b3', h)
-                    # h = await base.caches_processing('64be467d-5881-416e-be81-fc697334b6e4', h)
-                    # h = await base.caches_processing('541f0b86-f354-40ae-b2cc-71b091929e31', h)
+                    # h = await Base.caches_processing('aa50aae2-8879-4945-9553-825e911fc9c4', h)
+                    # h = await Base.caches_processing('b1a8f2ae-3a16-4018-ad69-0a843e61796c', h)
+                    # h = await Base.caches_processing('667a73c2-e026-483d-8033-1caadcea8f99', h)
+                    # h = await Base.caches_processing('fbc884bf-b18b-4591-8f4d-fd229b9dc11d', h)
+                    # h = await Base.caches_processing('48b24708-ad36-4aa7-9772-17940e7741c8', h)
+                    # h = await Base.caches_processing('cf535155-7337-4310-84d5-3e6e720bf36e', h)
+                    # h = await Base.caches_processing('56ed2b59-2293-42c7-8493-46d30cfebdf6', h)
+                    # h = await Base.caches_processing('4b2ab9f4-f1b2-4b41-8e1b-fd719bd797b3', h)
+                    # h = await Base.caches_processing('64be467d-5881-416e-be81-fc697334b6e4', h)
+                    # h = await Base.caches_processing('541f0b86-f354-40ae-b2cc-71b091929e31', h)
 
                     fields = h
 
@@ -1010,7 +1008,7 @@ class base:
                         print("Data found in cache!")
                         res = cache[key]
                         if condition:
-                            await base.delete_in_cache(date, time, department, service, fields_s)
+                            await Base.delete_in_cache(date, time, department, service, fields_s)
                         return res
 
                     result = await func(*args)
@@ -1043,7 +1041,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1178,7 +1176,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1205,7 +1203,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1235,7 +1233,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1271,7 +1269,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1303,7 +1301,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1319,7 +1317,7 @@ class base:
 
     async def phone_input_new(self):
         try:
-            import datetime
+
 
             # Устанавливаем текущую дату
             date = datetime.datetime.now().date()
@@ -1353,7 +1351,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
             return False
@@ -1379,7 +1377,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1408,7 +1406,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1434,7 +1432,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1458,7 +1456,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1498,7 +1496,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1538,7 +1536,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1558,7 +1556,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1662,7 +1660,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1751,7 +1749,7 @@ class base:
                     # Вывод подробной информации об ошибке
                     print(f"Поймано исключение: {type(e).__name__}")
                     print(f"Сообщение об ошибке: {str(e)}")
-                    import traceback
+
                     print("Трассировка стека (stack trace):")
                     traceback.print_exc()
 
@@ -1760,7 +1758,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1786,7 +1784,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1810,7 +1808,7 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()
 
@@ -1840,6 +1838,6 @@ class base:
             # Вывод подробной информации об ошибке
             print(f"Поймано исключение: {type(e).__name__}")
             print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
+
             print("Трассировка стека (stack trace):")
             traceback.print_exc()

@@ -1,252 +1,48 @@
-import os
-import certifi
-
-# !!! ЭТО ДОЛЖНО БЫТЬ В САМОМ НАЧАЛЕ ФАЙЛА !!!
-os.environ['SSL_CERT_FILE'] = certifi.where()
-os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
-
-from functools import wraps
-
-from multiprocessing import Process
-from vkbottle import BaseStateGroup
-from vkbottle import Bot
-from vkbottle.bot import BotLabeler, Message
-from vkbottle import CtxStorage
-
-from pathlib import Path
-import mysql.connector
+from datetime import datetime
 import json
-
-from typing import Dict, Any
+from src.usercontext import UserContext
+import configparser
+from loguru import logger
 import threading
-import aiohttp
-from aiohttp import web, ClientSession
-
+from src.consultations import Store
 import asyncio
+import aiohttp
+from vkbottle import Bot, BaseStateGroup
+from .base import Base
+from vkbottle.bot import Message
+from functools import wraps
+from .keyboards import buttons
+from pathlib import Path
+from src.cache_manager import CacheManager
+import aiofiles
 from vkbottle import Keyboard, KeyboardButtonColor, Text
+from vkbottle.tools.auth import UserAuth
+import traceback
+import psutil
+import os
+import gc
+import inspect
+from vkbottle.tools import PhotoMessageUploader
+import requests
+from typing import Optional, List, Dict, Any, Union
+import re
 
+BASE_DIR = Path(__file__).resolve().parent.parent
 
-import sys
-
-# Класс Store для хранения консультаций
-class Store:
-    def __init__(self):
-        self.consultations: Dict[str, Any] = {}
-        self._lock = asyncio.Lock()
-        self.cache_file = Path("cache/consultations")
-        self.cache_file.parent.mkdir(parents=True, exist_ok=True)
-
-    def _truncate(self, name: str, data: Any) -> Any:
-        """Обработка данных консультации"""
-        # Если data - это строка, оборачиваем в словарь с ключом message
-        if isinstance(data, str):
-            return {"message": data}
-        # Если data уже словарь, возвращаем как есть
-        return data
-
-    def load_from_cache_sync(self):
-        """Синхронная загрузка консультаций из кэша"""
-        if self.cache_file.exists():
-            try:
-                with open(self.cache_file, 'r', encoding='utf-8') as f:
-                    self.consultations = json.load(f)
-                logger.info(f"Loaded consultations from cache: {len(self.consultations)} items")
-                return True
-            except Exception as e:
-                logger.error(f"Error loading cache: {e}")
-                return False
-        return False
-
-    async def load_from_cache(self):
-        """Асинхронная загрузка консультаций из кэша"""
-        if self.cache_file.exists():
-            try:
-                with open(self.cache_file, 'r', encoding='utf-8') as f:
-                    self.consultations = json.load(f)
-                logger.info(f"Loaded consultations from cache: {len(self.consultations)} items")
-                return True
-            except Exception as e:
-                logger.error(f"Error loading cache: {e}")
-                return False
-        return False
-
-    async def subscribe_to_consultations(self, session: ClientSession, *, endpoint: str):
-        """Подписка на получение консультаций"""
-        cache_file = self.cache_file
-        try:
-            base_url = os.environ.get('INTERNAL_API_URL', 'http://172.18.11.104:8001')
-            url = f"{base_url}/api/v1/shared/subscribe"
-
-            # СТАЛО
-            bind_host = os.environ.get("SELF_HOST", "0.0.0.0")
-            port = int(os.environ.get("SELF_PORT", "8000"))
-
-            # PUBLIC_HOST — реальный IP/домен, по которому внешний API сможет
-            # достучаться до нашего сервера. НЕЛЬЗЯ 0.0.0.0, обычно нельзя и localhost,
-            # если API находится не в той же сети/контейнере.
-            public_host = os.environ.get("PUBLIC_HOST")
-            if not public_host:
-                logger.error(
-                    "PUBLIC_HOST не задан — вебхук будет зарегистрирован на "
-                    f"недостижимый адрес ({bind_host}). Уведомления работать не будут."
-                )
-                public_host = bind_host  # fallback, скорее всего всё ещё сломано
-
-            webhook_url = f"http://{public_host}:{port}{endpoint}"
-
-            logger.info(f"Subscribing to: {url} with webhook: {webhook_url}")
-
-            async with session.post(
-                url,
-                json={
-                    "webhook_url": webhook_url,
-                    "platform": "vk",
-                    "resources": []
-                },
-                timeout=aiohttp.ClientTimeout(total=10)
-            ) as response:
-                if response.status in [200, 201]:
-                    consultations_data = await response.json()
-                    logger.info(f"Received {len(consultations_data)} consultations from API")
-
-                    # Исправленный парсинг: используем resource вместо name
-                    consultations = {}
-                    for item in consultations_data:
-                        # Проверяем, что в ответе есть нужные поля
-                        if "resource" in item and "data" in item:
-                            consultations[item["resource"]] = self._truncate(item["resource"], item["data"])
-                        else:
-                            logger.warning(f"Skipping item without 'resource' or 'data': {item}")
-
-                    # Сохраняем в кэш
-                    with open(cache_file, 'w', encoding='utf-8') as f:
-                        json.dump(consultations, f, ensure_ascii=False, indent=2)
-
-                    self.consultations = consultations
-                    logger.info(f"Subscribed to consultations: {len(consultations)} items")
-                    logger.info(f"Available consultations: {list(consultations.keys())}")
-                    return consultations
-                else:
-                    error_text = await response.text()
-                    logger.error(f"Failed to subscribe: {response.status} - {error_text}")
-                    if await self.load_from_cache():
-                        return self.consultations
-                    return None
-
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            logger.error(f"Failed to fetch consultations: %s", e)
-            if await self.load_from_cache():
-                logger.warning("Reading consultations from cache")
-                return self.consultations
-            else:
-                logger.critical("Failed to read consultations from cache")
-                return None
-
-# Глобальный экземпляр Store
-store = Store()
-
-# Функция для обработки обновлений
-def make_update_handler(store_instance: Store):
-    async def handle_update(request: web.Request) -> web.Response:
-        try:
-            data = await request.json()
-        except Exception as e:
-            logger.error(f"Invalid JSON in request: {e}")
-            return web.Response(status=400)
-
-        async with store_instance._lock:
-            # Нормализуем к {resource: data}, как и при первичной подписке —
-            # иначе апдейт в "списочном" формате молча ломает store.
-            if isinstance(data, list):
-                normalized = {}
-                for item in data:
-                    if isinstance(item, dict) and "resource" in item and "data" in item:
-                        normalized[item["resource"]] = store_instance._truncate(item["resource"], item["data"])
-                    else:
-                        logger.warning(f"Skipping malformed update item: {item}")
-                data = normalized
-            elif not isinstance(data, dict):
-                logger.error(f"Unexpected update payload type: {type(data)}")
-                return web.Response(status=400)
-
-            store_instance.consultations.update(data)
-            try:
-                with open(store_instance.cache_file, 'w', encoding='utf-8') as f:
-                    json.dump(store_instance.consultations, f, ensure_ascii=False, indent=2)
-                logger.info(f"Updated cache with {len(data)} items: {list(data.keys())}")
-            except Exception as e:
-                logger.error(f"Error saving cache: {e}")
-
-        return web.Response(status=200)
-    return handle_update
-
-# Функция для запуска веб-сервера обновлений в отдельном потоке
-def run_update_server_in_thread():
-    """Запуск веб-сервера для приема обновлений в отдельном потоке"""
-    endpoint = "/update"
-
-    app = web.Application()
-    app.router.add_post(endpoint, make_update_handler(store))
-
-    # Создаем новый event loop для этого потока
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    runner = web.AppRunner(app)
-    loop.run_until_complete(runner.setup())
-
-    port = int(os.environ.get("SELF_PORT", 8000))
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    loop.run_until_complete(site.start())
-
-    logger.info(f"Update server started on port {port}")
-
-    try:
-        loop.run_forever()
-    except KeyboardInterrupt:
-        logger.info("Shutting down update server...")
-    finally:
-        loop.run_until_complete(runner.cleanup())
-        loop.close()
-
-# Асинхронная функция для подписки на консультации
-async def subscribe_consultations_async():
-    """Асинхронная подписка на консультации"""
-    async with aiohttp.ClientSession() as session:
-        await store.subscribe_to_consultations(session, endpoint="/update")
-
-# Синхронная обертка для подписки
-def subscribe_consultations_sync():
-    """Синхронная подписка на консультации"""
-    asyncio.run(subscribe_consultations_async())
-
-with open('messages.json', 'r', encoding='utf-8') as file:
+with open(BASE_DIR / 'messages.json', 'r', encoding='utf-8') as file:
     loaded_data = json.load(file)
 
-with open('departments.json', 'r', encoding='utf-8') as file:
+with open(BASE_DIR / 'departments.json', 'r', encoding='utf-8') as file:
     filials_id = json.load(file)
 
-with open('services.json', 'r', encoding='utf-8') as file:
+with open(BASE_DIR / 'services.json', 'r', encoding='utf-8') as file:
     services_id = json.load(file)
 
-with open('services_name.json', 'r', encoding='utf-8') as file:
+with open(BASE_DIR / 'services_name.json', 'r', encoding='utf-8') as file:
     services_name = json.load(file)
 
-with open('bid_locations.json', 'r', encoding='utf-8') as file:
+with open(BASE_DIR / 'bid_locations.json', 'r', encoding='utf-8') as file:
     bid_locations = json.load(file)
-
-labeler = BotLabeler()
-
-import aiofiles
-import configparser
-import logging
-
-from keyboards import *
-from base import *
-
-# Чтение конфигурации
-config = configparser.ConfigParser()
-config.read("config.ini")
 
 # Общие словари диспетчеризации payload -> обработчик кнопки.
 # Раньше были продублированы по 2-3 раза в разных state-хендлерах
@@ -288,7 +84,6 @@ DISTRICT_BUTTONS = {
 PATTERN_TELEPHONE_STRICT = r'^(8|\+7)[0-9]{10}$'
 PATTERN_TELEPHONE_LOOSE = r'(8|\+7)[0-9]{10}'
 
-
 def get_first_button_cmd(keyboard: str) -> str:
     """Достаёт 'cmd' из payload первой кнопки сериализованной клавиатуры.
 
@@ -299,100 +94,17 @@ def get_first_button_cmd(keyboard: str) -> str:
     payload_value = keyboard_data['buttons'][0][0]['action']['payload']
     return eval(str(payload_value))['cmd']
 
-from loguru import logger
-
-# Отключаем стандартный логгер vkbottle
-logging.getLogger("vkbottle").disabled = True
-
-# Настраиваем loguru, чтобы игнорировать логи
-logger.remove()  # Удаляем все существующие обработчики loguru
-
-logger.add(sys.stdout, level="INFO")  # Добавляем обработчик для вывода в консоль
-
-host="172.18.11.104"
-user="root"
-password="enigma1418"
-database="mdtomskbot"
-
-import hashlib
-import json
-from datetime import date
-
-# Класс для управления кешем
-class CacheManager:
-    def __init__(self):
-        self.cache = {}
-        self.cache_date = None
-
-    def _get_today(self):
-        return date.today()
-
-    def _get_cache_key(self, *args, **kwargs):
-        """Создает уникальный ключ для кеша"""
-        key_data = f"{args}{kwargs}".encode('utf-8')
-        return hashlib.md5(key_data).hexdigest()
-
-    def get(self, key):
-        """Получает данные из кеша, если они актуальны"""
-        today = self._get_today()
-
-        # Если дата изменилась - очищаем кеш
-        if self.cache_date != today:
-            self.clear()
-            self.cache_date = today
-            return None
-
-        return self.cache.get(key)
-
-    def set(self, key, value):
-        """Сохраняет данные в кеш"""
-        today = self._get_today()
-
-        if self.cache_date != today:
-            self.clear()
-            self.cache_date = today
-
-        self.cache[key] = value
-
-    def clear(self):
-        """Очищает кеш"""
-        self.cache.clear()
-        logger.info("Cache cleared")
-
-    def get_or_set(self, key, getter_func, *args, **kwargs):
-        """
-        Получает данные из кеша или вызывает функцию для их получения
-        """
-        cached_data = self.get(key)
-        if cached_data is not None:
-            logger.info(f"Cache hit for key: {key}")
-            return cached_data
-
-        logger.info(f"Cache miss for key: {key}, fetching data...")
-        data = getter_func(*args, **kwargs)
-        self.set(key, data)
-        return data
-
-    async def get_or_set_async(self, key, async_getter_func, *args, **kwargs):
-        """
-        Асинхронно получает данные из кеша или вызывает функцию для их получения
-        """
-        cached_data = self.get(key)
-        if cached_data is not None:
-            logger.info(f"Cache hit for key: {key}")
-            return cached_data
-
-        logger.info(f"Cache miss for key: {key}, fetching data asynchronously...")
-        data = await async_getter_func(*args, **kwargs)
-        self.set(key, data)
-        return data
-
 # Создаем глобальный экземпляр менеджера кеша
 cache_manager = CacheManager()
 
-def process_1():
+def bot_start():
 
-    from datetime import datetime, timedelta
+    # Глобальный экземпляр Store
+    store = Store()
+
+    # Чтение конфигурации
+    config = configparser.ConfigParser()
+    config.read("config.ini")
 
     async def com(message):
         try:
@@ -406,9 +118,9 @@ def process_1():
             print('Ошибка в функции def com', e)
             return None
 
-    ctx = CtxStorage()
+    user_context = UserContext()
 
-    from vkbottle.tools.auth import UserAuth
+
     # Проверяем перед созданием бота
     print("Перед Bot:", UserAuth.AUTH_URL)
     UserAuth.AUTH_URL = "https://oauth.vk.ru/token"
@@ -435,6 +147,17 @@ def process_1():
     #     target=start_update_server_in_background, daemon=True
     # )
     # update_server_thread.start()
+
+    # Асинхронная функция для подписки на консультации
+    async def subscribe_consultations_async():
+        """Асинхронная подписка на консультации"""
+        async with aiohttp.ClientSession() as session:
+            await store.subscribe_to_consultations(session, endpoint="/update")
+
+    # Синхронная обертка для подписки
+    def subscribe_consultations_sync():
+        """Синхронная подписка на консультации"""
+        asyncio.run(subscribe_consultations_async())
 
     def subscribe_in_background():
         try:
@@ -504,7 +227,7 @@ def process_1():
         # Вывод подробной информации об ошибке
         print(f"Поймано исключение: {type(e).__name__}")
         print(f"Сообщение об ошибке: {str(e)}")
-        import traceback
+
         print("Трассировка стека (stack trace):")
         traceback.print_exc()
         await bot.state_dispenser.set(message.peer_id, SuperStates.MENU)
@@ -513,15 +236,9 @@ def process_1():
 
     async def reset_ctx(user_id):
         await debug_print('ВХОД В ФУНКЦИЮ reset_ctx', user_id)
-        # Создаем список ключей для удаления
-        keys_to_remove = [key for key in ctx.__dict__['storage'] if str(user_id) in key and \
-        'talon_select_vkontakte_reg' not in key and \
-        'department_select_vkontakte_reg' not in key and 'phone' not in key]
-
-        # Удаляем ключи из storage
-        for key in keys_to_remove:
-            ctx.__dict__['storage'].pop(key, None)
-            # pass
+        # Все пользовательские данные хранятся централизованно в UserContext.
+        # Сбрасываем данные только этого пользователя, сохраняя необходимые поля.
+        user_context.reset_user(user_id)
 
         await debug_print('ВЫХОД ИЗ ФУНКЦИИ reset_ctx', user_id)
         return
@@ -558,10 +275,7 @@ def process_1():
                 keyboard=keyboard  # Добавляем клавиатуру
             )
 
-            import psutil
-            import os
 
-            import gc
 
             process = psutil.Process(os.getpid())
             mem_usage = process.memory_info().rss / (1024 * 1024)
@@ -580,8 +294,8 @@ def process_1():
         tel = result[7]
         fio = result[8]
         service_id = result[10]
-        ctx.set(f'{user_id}: talon_select_vkontakte_reg', talon)
-        ctx.set(f'{user_id}: department_select_vkontakte_reg', department)
+        user_context.set(f'{user_id}: talon_select_vkontakte_reg', talon)
+        user_context.set(f'{user_id}: department_select_vkontakte_reg', department)
 
         keyboard = await buttons.delete_coupon(uuid, talon, department, date, tel, fio, time_, service_id)
         await debug_print('ВЫХОД ИЗ ФУНКЦИИ notification_delete_coupon', user_id)
@@ -589,15 +303,15 @@ def process_1():
         return await message.answer(formatted_message, keyboard=keyboard)
 
     async def user_verification(user_id, message, users_info):
-        result = await base(user_id = user_id).select_vkontakte_reg()
+        result = await Base(user_id = user_id).select_vkontakte_reg()
         if result:
             return await notification_delete_coupon(user_id, message, result)
 
-        answer = await base(user_id = user_id).phone_select()
+        answer = await Base(user_id = user_id).phone_select()
 
         if answer[0]:
 
-            ctx.set(f'{user_id}: phone', answer[1][0][0])
+            user_context.set(f'{user_id}: phone', answer[1][0][0])
 
             await bot.state_dispenser.set(message.peer_id, SuperStates.FILIALS)
             await buttons.menu(user_id, config["VKONTAKTE"]["token"])
@@ -609,7 +323,7 @@ def process_1():
             return await message.answer(loaded_data['1'])
 
     async def debug_print(message, user_id):
-        import inspect
+
         # Получаем информацию о текущем фрейме
         frame = inspect.currentframe()
         # Получаем номер строки, где вызвана функция debug_print
@@ -622,24 +336,24 @@ def process_1():
         #             '539', '575', '437', '479', '383',
         #             '329', '419', '713', '731', '725',
         #             '521', '551', '623', '527')
-        # if ctx.get(f'{user_id}: department') in departments and ctx.get(f'{user_id}: service') == '97d144a1-14ab-4381-ad05-5575c54e677d':
-        #     ctx.set(f"{user_id}: service", "05465061-51e8-45fc-94e5-706b1814008f")
-        # if ctx.get(f'{user_id}: department') == '371' and ctx.get(f'{user_id}: service') == 'fb6348b0-6b0c-4aa3-9deb-7385894beb39':
-        #     ctx.set(f"{user_id}: service", "d63b672a-a1fc-464a-974e-53f0ce3a0d86")
-        # if ctx.get(f'{user_id}: department') == '371' and ctx.get(f'{user_id}: service') == 'f94fd42b-611b-460a-8270-059526b40d35':
-        #     ctx.set(f"{user_id}: service", "9b0b1691-42ab-419e-bcd0-c2aa67cd73fd")
-        # if ctx.get(f'{user_id}: department') == '509' and ctx.get(f'{user_id}: service') == 'fb6348b0-6b0c-4aa3-9deb-7385894beb39':
-        #     ctx.set(f"{user_id}: service", "d63b672a-a1fc-464a-974e-53f0ce3a0d86")
-        # if ctx.get(f'{user_id}: department') == '509' and ctx.get(f'{user_id}: service') == 'f94fd42b-611b-460a-8270-059526b40d35':
-        #     ctx.set(f"{user_id}: service", "9b0b1691-42ab-419e-bcd0-c2aa67cd73fd")
-        # if ctx.get(f'{user_id}: department') == '509' and ctx.get(f'{user_id}: service') == '976eb69d-83cb-42b9-893a-926e11956393':
-        #     ctx.set(f"{user_id}: service", "ba08e8e1-4687-45fd-ba5c-c22320066bf6")
-        # if ctx.get(f'{user_id}: department') in departments and ctx.get(f'{user_id}: service') == 'fb6348b0-6b0c-4aa3-9deb-7385894beb39':
-        #     ctx.set(f"{user_id}: service", "d63b672a-a1fc-464a-974e-53f0ce3a0d86")
-        # if ctx.get(f'{user_id}: department') in departments and ctx.get(f'{user_id}: service') == 'f94fd42b-611b-460a-8270-059526b40d35':
-        #     ctx.set(f"{user_id}: service", "05465061-51e8-45fc-94e5-706b1814008f")
-        # if ctx.get(f'{user_id}: department') in departments and ctx.get(f'{user_id}: service') == '97d144a1-14ab-4381-ad05-5575c54e677d':
-        #     ctx.set(f"{user_id}: service", "9b0b1691-42ab-419e-bcd0-c2aa67cd73fd")
+        # if user_context.get(f'{user_id}: department') in departments and user_context.get(f'{user_id}: service') == '97d144a1-14ab-4381-ad05-5575c54e677d':
+        #     user_context.set(f"{user_id}: service", "05465061-51e8-45fc-94e5-706b1814008f")
+        # if user_context.get(f'{user_id}: department') == '371' and user_context.get(f'{user_id}: service') == 'fb6348b0-6b0c-4aa3-9deb-7385894beb39':
+        #     user_context.set(f"{user_id}: service", "d63b672a-a1fc-464a-974e-53f0ce3a0d86")
+        # if user_context.get(f'{user_id}: department') == '371' and user_context.get(f'{user_id}: service') == 'f94fd42b-611b-460a-8270-059526b40d35':
+        #     user_context.set(f"{user_id}: service", "9b0b1691-42ab-419e-bcd0-c2aa67cd73fd")
+        # if user_context.get(f'{user_id}: department') == '509' and user_context.get(f'{user_id}: service') == 'fb6348b0-6b0c-4aa3-9deb-7385894beb39':
+        #     user_context.set(f"{user_id}: service", "d63b672a-a1fc-464a-974e-53f0ce3a0d86")
+        # if user_context.get(f'{user_id}: department') == '509' and user_context.get(f'{user_id}: service') == 'f94fd42b-611b-460a-8270-059526b40d35':
+        #     user_context.set(f"{user_id}: service", "9b0b1691-42ab-419e-bcd0-c2aa67cd73fd")
+        # if user_context.get(f'{user_id}: department') == '509' and user_context.get(f'{user_id}: service') == '976eb69d-83cb-42b9-893a-926e11956393':
+        #     user_context.set(f"{user_id}: service", "ba08e8e1-4687-45fd-ba5c-c22320066bf6")
+        # if user_context.get(f'{user_id}: department') in departments and user_context.get(f'{user_id}: service') == 'fb6348b0-6b0c-4aa3-9deb-7385894beb39':
+        #     user_context.set(f"{user_id}: service", "d63b672a-a1fc-464a-974e-53f0ce3a0d86")
+        # if user_context.get(f'{user_id}: department') in departments and user_context.get(f'{user_id}: service') == 'f94fd42b-611b-460a-8270-059526b40d35':
+        #     user_context.set(f"{user_id}: service", "05465061-51e8-45fc-94e5-706b1814008f")
+        # if user_context.get(f'{user_id}: department') in departments and user_context.get(f'{user_id}: service') == '97d144a1-14ab-4381-ad05-5575c54e677d':
+        #     user_context.set(f"{user_id}: service", "9b0b1691-42ab-419e-bcd0-c2aa67cd73fd")
         pass
 
     @bot.labeler.message(state=SuperStates.GRADE)
@@ -664,27 +378,27 @@ def process_1():
             async def number_review():
                 await debug_print('ВХОД В ФУНКЦИЮ number_review', user_id)
 
-                await base(user_id=user_id).base_count('review')
+                await Base(user_id=user_id).base_count('review')
 
                 await message.answer(loaded_data['4'])
 
-                number_statement = ctx.get(f'{user_id}: number_statement')
-                number_date = ctx.get(f'{user_id}: number_date')
-                number_department = ctx.get(f'{user_id}: number_department')
-                number_grade = ctx.get(f'{user_id}: number_grade')
-                number_waiting_time = ctx.get(f'{user_id}: number_waiting_time')
-                number_time = ctx.get(f'{user_id}: number_time')
-                number_employee = ctx.get(f'{user_id}: number_employee')
-                number_review = ctx.get(f'{user_id}: number_review')
+                number_statement = user_context.get(f'{user_id}: number_statement')
+                number_date = user_context.get(f'{user_id}: number_date')
+                number_department = user_context.get(f'{user_id}: number_department')
+                number_grade = user_context.get(f'{user_id}: number_grade')
+                number_waiting_time = user_context.get(f'{user_id}: number_waiting_time')
+                number_time = user_context.get(f'{user_id}: number_time')
+                number_employee = user_context.get(f'{user_id}: number_employee')
+                number_review = user_context.get(f'{user_id}: number_review')
 
                 date_now = str(datetime.now().date())
 
                 questions = (number_statement, number_date, number_department, number_grade, number_waiting_time, number_time, number_employee, number_review, date_now)
 
-                await base().base_review(*questions)
+                await Base().base_review(*questions)
 
                 for context in contexts:
-                    ctx.set(f"{user_id}: {context}", "None")
+                    user_context.set(f"{user_id}: {context}", "None")
 
                 return await user_verification(user_id, message, users_info)
 
@@ -693,34 +407,34 @@ def process_1():
                 if payload_data == None:
                     raise TypeError
 
-                if payload_data == '1' and ctx.get(f'{user_id}: number_employee') != 'None':
-                    ctx.set(f"{user_id}: number_review", '')
+                if payload_data == '1' and user_context.get(f'{user_id}: number_employee') != 'None':
+                    user_context.set(f"{user_id}: number_review", '')
                     return await number_review()
 
                 if payload_data == 'menu' or payload_data == 'back':
 
                     for context in contexts:
-                        ctx.set(f"{user_id}: {context}", "None")
+                        user_context.set(f"{user_id}: {context}", "None")
 
                     return await user_verification(user_id, message, users_info)
 
-                elif ctx.get(f'{user_id}: number_department') != 'None' and ctx.get(f'{user_id}: number_grade') == 'None':
-                    ctx.set(f"{user_id}: number_grade", payload_data)
+                elif user_context.get(f'{user_id}: number_department') != 'None' and user_context.get(f'{user_id}: number_grade') == 'None':
+                    user_context.set(f"{user_id}: number_grade", payload_data)
                     keyboard = await buttons.waiting_time()
                     return await message.answer(loaded_data['5'], keyboard=keyboard)
 
-                elif ctx.get(f'{user_id}: number_grade') != 'None' and ctx.get(f'{user_id}: number_waiting_time') == 'None':
-                    ctx.set(f"{user_id}: number_waiting_time", payload_data)
+                elif user_context.get(f'{user_id}: number_grade') != 'None' and user_context.get(f'{user_id}: number_waiting_time') == 'None':
+                    user_context.set(f"{user_id}: number_waiting_time", payload_data)
                     keyboard = await buttons.reception_1()
                     return await message.answer(loaded_data['6'], keyboard=keyboard)
 
-                elif ctx.get(f'{user_id}: number_waiting_time') != 'None' and ctx.get(f'{user_id}: number_time') == 'None':
-                    ctx.set(f"{user_id}: number_time", payload_data)
+                elif user_context.get(f'{user_id}: number_waiting_time') != 'None' and user_context.get(f'{user_id}: number_time') == 'None':
+                    user_context.set(f"{user_id}: number_time", payload_data)
                     keyboard = await buttons.reception_2()
                     return await message.answer(loaded_data['7'], keyboard=keyboard)
 
-                elif ctx.get(f'{user_id}: number_time') != 'None':
-                    ctx.set(f"{user_id}: number_employee", payload_data)
+                elif user_context.get(f'{user_id}: number_time') != 'None':
+                    user_context.set(f"{user_id}: number_employee", payload_data)
                     keyboard = await buttons.grade()
                     return await message.answer(loaded_data['8'], keyboard=keyboard)
 
@@ -734,29 +448,29 @@ def process_1():
 
             except TypeError:
 
-                if ctx.get(f'{user_id}: number_employee') != 'None':
-                    ctx.set(f"{user_id}: number_review", message.text)
+                if user_context.get(f'{user_id}: number_employee') != 'None':
+                    user_context.set(f"{user_id}: number_review", message.text)
                     return await number_review()
 
                 pattern_number_statement = r'\d{2}/\d{4}/\d{1,10}'
 
-                if ctx.get(f'{user_id}: number_statement') == 'None' and re.search(pattern_number_statement, message.text):
+                if user_context.get(f'{user_id}: number_statement') == 'None' and re.search(pattern_number_statement, message.text):
 
-                    res = await base().search_cpgu_order(message.text)
+                    res = await Base().search_cpgu_order(message.text)
                     if not res:
                         keyboard = await buttons.menu_menu()
                         await message.answer(f"Данное заявление в базе не найдено")
                         return await message.answer(loaded_data['10'], keyboard=keyboard)
 
-                    ctx.set(f"{user_id}: number_date", res)
+                    user_context.set(f"{user_id}: number_date", res)
 
-                    ctx.set(f"{user_id}: number_statement", re.search(pattern_number_statement, message.text).group())
+                    user_context.set(f"{user_id}: number_statement", re.search(pattern_number_statement, message.text).group())
 
                     cache_text = str(message.text).split('/')[0]
                     try:
-                        ctx.set(f"{user_id}: number_department", bid_locations[re.search(pattern_number_statement, message.text).group()[0:2]])
+                        user_context.set(f"{user_id}: number_department", bid_locations[re.search(pattern_number_statement, message.text).group()[0:2]])
                     except:
-                        ctx.set(f"{user_id}: number_statement", 'None')
+                        user_context.set(f"{user_id}: number_statement", 'None')
                         keyboard = await buttons.menu_menu()
                         await message.answer(f"Код {cache_text} не найден")
                         return await message.answer(loaded_data['10'], keyboard=keyboard)
@@ -801,7 +515,7 @@ def process_1():
 
             except TypeError:
 
-                await base.support_message(user_id, message)
+                await Base.support_message(user_id, message)
                 await message.answer(loaded_data['14'])
 
                 return await user_verification(user_id, message, users_info)
@@ -828,21 +542,21 @@ def process_1():
         try:
             await debug_print('ВХОД В ФУНКЦИЮ application', user_id)
             async def post_application():
-                if ctx.get(f'{user_id}: category_application') == 'None':
-                    ctx.set(f'{user_id}: category_application', '')
+                if user_context.get(f'{user_id}: category_application') == 'None':
+                    user_context.set(f'{user_id}: category_application', '')
 
-                SSR = (ctx.get(f'{user_id}: fio_application'),
-                    ctx.get(f'{user_id}: contact_application'),
-                    ctx.get(f'{user_id}: application_service'),
-                    ctx.get(f'{user_id}: service_application'),
-                    ctx.get(f'{user_id}: category_application'))
+                SSR = (user_context.get(f'{user_id}: fio_application'),
+                    user_context.get(f'{user_id}: contact_application'),
+                    user_context.get(f'{user_id}: application_service'),
+                    user_context.get(f'{user_id}: service_application'),
+                    user_context.get(f'{user_id}: category_application'))
 
-                await base.base_post_application(*SSR)
+                await Base.base_post_application(*SSR)
 
                 for context in contexts:
-                    ctx.set(f"{user_id}: {context}", "None")
+                    user_context.set(f"{user_id}: {context}", "None")
 
-                await base(user_id=user_id).base_count('away')
+                await Base(user_id=user_id).base_count('away')
 
                 await message.answer(loaded_data['15'])
 
@@ -865,7 +579,7 @@ def process_1():
                     return await message.answer("Выберите услугу", keyboard=keyboard)
 
                 if payload_data in services_name:
-                    ctx.set(f'{user_id}: service_application', services_name[payload_data])
+                    user_context.set(f'{user_id}: service_application', services_name[payload_data])
                     await post_application()
 
                 if payload_data == 'back_1':
@@ -875,59 +589,59 @@ def process_1():
                 if payload_data == 'menu' or payload_data == 'back':
 
                     for context in contexts:
-                        ctx.set(f"{user_id}: {context}", "None")
+                        user_context.set(f"{user_id}: {context}", "None")
 
                     return await user_verification(user_id, message, users_info)
                 elif payload_data == 'accept_entry':
-                    await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                    await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                     return await user_verification(user_id, message, users_info)
                 elif payload_data == 'application_service_1' or payload_data == "application_service_2":
-                    ctx.set(f'{user_id}: application_service', payload_data[-1])
+                    user_context.set(f'{user_id}: application_service', payload_data[-1])
                     if payload_data == 'application_service_1':
                         keyboard = await buttons.services_section('12345')
                         return await message.answer("Выберите услугу", keyboard=keyboard)
                     elif payload_data == 'application_service_2':
-                        ctx.set(f'{user_id}: service_application', '')
+                        user_context.set(f'{user_id}: service_application', '')
                         await post_application()
 
             except TypeError:
 
                 pattern_telephone = PATTERN_TELEPHONE_LOOSE
 
-                if not re.search(pattern_telephone, message.text) and ctx.get(f'{user_id}: contact_application') == 'None':
+                if not re.search(pattern_telephone, message.text) and user_context.get(f'{user_id}: contact_application') == 'None':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['17'], keyboard=keyboard)
 
-                elif ctx.get(f'{user_id}: contact_application') == 'None':
+                elif user_context.get(f'{user_id}: contact_application') == 'None':
 
-                    if ctx.get(f'{user_id}: application_location') == '1':
+                    if user_context.get(f'{user_id}: application_location') == '1':
                         for location in locations_1:
                             if location.lower() in message.text.lower() and not 'область' in message.text.lower():
-                                ctx.set(f'{user_id}: contact_application', message.text)
+                                user_context.set(f'{user_id}: contact_application', message.text)
                                 keyboard = await buttons.menu_menu()
                                 return await message.answer(loaded_data['18'], keyboard=keyboard)
                         else:
                             keyboard = await buttons.menu_menu()
                             return await message.answer(loaded_data['19'], keyboard=keyboard)
 
-                    elif ctx.get(f'{user_id}: application_location') == '2':
+                    elif user_context.get(f'{user_id}: application_location') == '2':
                         for location in locations_2:
                             if location.lower() in message.text.lower() and not 'область' in message.text.lower():
-                                ctx.set(f'{user_id}: contact_application', message.text)
+                                user_context.set(f'{user_id}: contact_application', message.text)
                                 keyboard = await buttons.menu_menu()
                                 return await message.answer(loaded_data['18'], keyboard=keyboard)
                         else:
                             keyboard = await buttons.menu_menu()
                             return await message.answer(loaded_data['19'], keyboard=keyboard)
 
-                elif ctx.get(f'{user_id}: fio_application') == 'None':
-                    ctx.set(f'{user_id}: fio_application', message.text)
+                elif user_context.get(f'{user_id}: fio_application') == 'None':
+                    user_context.set(f'{user_id}: fio_application', message.text)
                     keyboard = await buttons.application_service()
                     return await message.answer(loaded_data['20'], keyboard=keyboard)
 
                 else:
-                    ctx.set(f'{user_id}: contact_application', 'None')
+                    user_context.set(f'{user_id}: contact_application', 'None')
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['21'], keyboard=keyboard)
             await debug_print('ВЫХОД ИЗ ФУНКЦИИ application', user_id)
@@ -962,12 +676,12 @@ def process_1():
                     return await user_verification(user_id, message, users_info)
 
                 if payload_data == 'accept_entry':
-                    await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                    await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                     return await user_verification(user_id, message, users_info)
 
             except TypeError:
-                await base(user_id=user_id).base_anniversary(message.text)
+                await Base(user_id=user_id).base_anniversary(message.text)
 
                 await message.answer(loaded_data['22'])
 
@@ -1004,7 +718,7 @@ def process_1():
                     return await user_verification(user_id, message, users_info)
 
                 elif payload_data == 'accept_entry':
-                    await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                    await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                     return await user_verification(user_id, message, users_info)
 
@@ -1023,7 +737,7 @@ def process_1():
 
                 if message.text.isdigit() or validate_code(message.text):
 
-                    answer = await base.readiness_status(message.text)
+                    answer = await Base.readiness_status(message.text)
 
                     if answer['code'] == 'error' or answer['code'] == 'not_found':
                         keyboard = await buttons.menu_menu()
@@ -1087,13 +801,13 @@ def process_1():
 
             if re.match(pattern_telephone, message.text):
 
-                ctx.set(f'{user_id}: identification', 'yes')
+                user_context.set(f'{user_id}: identification', 'yes')
 
-                ctx.set(f'{user_id}: phone', message.text)
-                phone = ctx.get(f'{user_id}: phone')
+                user_context.set(f'{user_id}: phone', message.text)
+                phone = user_context.get(f'{user_id}: phone')
 
-                res = await base(user_id = user_id, tel = phone).phone_input()
-                await base(user_id = user_id, tel = phone).agreement_input()
+                res = await Base(user_id = user_id, tel = phone).phone_input()
+                await Base(user_id = user_id, tel = phone).agreement_input()
 
                 if not res:
                     return await message.answer(loaded_data['25'])
@@ -1135,9 +849,9 @@ def process_1():
             async def agreement_scenario_inside_filials():
                 await debug_print('ВХОД В ФУНКЦИЮ agreement_scenario_inside_filials', user_id)
 
-                ctx.set(f'{user_id}: agreement', '')
+                user_context.set(f'{user_id}: agreement', '')
 
-                await base(user_id=user_id).base_count('record')
+                await Base(user_id=user_id).base_count('record')
                 keyboard = await buttons.filials()
                 await bot.state_dispenser.set(message.peer_id, SuperStates.FILIALS)
                 await message.answer(loaded_data['27'])
@@ -1148,9 +862,9 @@ def process_1():
             async def agreement_scenario_inside_application():
                 await debug_print('ВХОД В ФУНКЦИЮ agreement_scenario_inside_application', user_id)
 
-                ctx.set(f'{user_id}: agreement', '')
+                user_context.set(f'{user_id}: agreement', '')
 
-                await base(user_id=user_id).base_count('application')
+                await Base(user_id=user_id).base_count('application')
                 keyboard = await buttons.application()
                 await bot.state_dispenser.set(message.peer_id, SuperStates.FILIALS)
                 await debug_print('ВЫХОД ИЗ ФУНКЦИИ agreement_scenario_inside_application', user_id)
@@ -1158,23 +872,23 @@ def process_1():
 
             async def agreement_scenario_outside(agreement_input):
                 await debug_print('ВХОД В ФУНКЦИЮ agreement_scenario_outside', user_id)
-                phone = ctx.get(f'{user_id}: phone')
+                phone = user_context.get(f'{user_id}: phone')
 
                 if agreement_input == 2:
                     return await user_verification(user_id, message, users_info)
 
-                await base(user_id = user_id, tel = phone).agreement_input(agreement_input)
+                await Base(user_id = user_id, tel = phone).agreement_input(agreement_input)
 
                 if agreement_input == 0:
                     await message.answer(loaded_data['30'])
 
                     return await user_verification(user_id, message, users_info)
 
-                answer = await base(user_id = user_id).phone_select()
+                answer = await Base(user_id = user_id).phone_select()
                 await debug_print('ВЫХОД ИЗ ФУНКЦИИ agreement_scenario_outside', user_id)
                 if answer[0]:
 
-                    agreement = ctx.get(f'{user_id}: agreement')
+                    agreement = user_context.get(f'{user_id}: agreement')
 
                     if agreement == 'filials':
                         return await agreement_scenario_inside_filials()
@@ -1182,7 +896,7 @@ def process_1():
                     elif agreement == 'application':
                         return await agreement_scenario_inside_application()
 
-                    ctx.set(f'{user_id}: phone', answer[1][0][0])
+                    user_context.set(f'{user_id}: phone', answer[1][0][0])
 
                     photo = "photo-224967611_457239778"
 
@@ -1216,7 +930,7 @@ def process_1():
 
     @retry_async(max_attempts=3, delay=1)
     async def upload_photo_from_url(url: str, message: Message) -> str:
-        from vkbottle.tools import PhotoMessageUploader
+
 
         def get_file_extension_from_url(url: str) -> str:
             return Path(url).suffix.lstrip(".") or "jpg"
@@ -1239,8 +953,7 @@ def process_1():
                 else:
                     raise Exception(f"Не удалось скачать изображение. Код: {resp.status}")
 
-    import requests
-    from typing import Optional, List, Dict, Any, Union
+
 
     # Константы
     ENDASH = "–"
@@ -1631,10 +1344,6 @@ def process_1():
         consultation_info = None
         consultation_index = None
 
-        print('POPAL')
-        print(tag)
-        print(slug)
-
         # ====== ПОЛУЧАЕМ КОНСУЛЬТАЦИЮ ПО ИНДЕКСУ (с кешированием) ======
         if cons:
             try:
@@ -1872,17 +1581,17 @@ def process_1():
                     raise TypeError
                 if payload_data == 'menu' or payload_data == 'back':
 
-                    SSR = (ctx.get(f'{user_id}: department'),
-                        ctx.get(f'{user_id}: service'),
-                        ctx.get(f'{user_id}: fields'))
+                    SSR = (user_context.get(f'{user_id}: department'),
+                        user_context.get(f'{user_id}: service'),
+                        user_context.get(f'{user_id}: fields'))
 
                     await bot.state_dispenser.set(message.peer_id, SuperStates.TIME)
-                    keyboard, times = await buttons.times_buttons(ctx.get(f'{user_id}: date'), ctx.get(f'{user_id}: time'), *SSR)
-                    ctx.set(f'{user_id}: times', times)
+                    keyboard, times = await buttons.times_buttons(user_context.get(f'{user_id}: date'), user_context.get(f'{user_id}: time'), *SSR)
+                    user_context.set(f'{user_id}: times', times)
                     await message.answer("Выберите свободное время", keyboard=keyboard)
 
                 elif payload_data == 'accept_entry':
-                    await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                    await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                     return await user_verification(user_id, message, users_info)
 
@@ -1890,10 +1599,10 @@ def process_1():
                 pattern_telephone = PATTERN_TELEPHONE_STRICT
                 if re.match(pattern_telephone, message.text):
 
-                    answer = await base(user_id = user_id, tel = message.text).phone_input_new()
+                    answer = await Base(user_id = user_id, tel = message.text).phone_input_new()
 
                     if answer:
-                        ctx.set(f'{user_id}: phone', message.text)
+                        user_context.set(f'{user_id}: phone', message.text)
 
                         await bot.state_dispenser.set(message.peer_id, SuperStates.PHONE)
                         keyboard = await buttons.fio_yes()
@@ -1901,7 +1610,7 @@ def process_1():
                     else:
                         await bot.state_dispenser.set(message.peer_id, SuperStates.TIME)
                         keyboard = await buttons.yes_no()
-                        formatted_message = loaded_data['32'].format(phone=ctx.get(f'{user_id}: phone'))
+                        formatted_message = loaded_data['32'].format(phone=user_context.get(f'{user_id}: phone'))
                         return await message.answer(formatted_message, keyboard=keyboard)
                 else:
                     keyboard = await buttons.menu_menu()
@@ -1938,14 +1647,14 @@ def process_1():
     #                 return await user_verification(user_id, message, users_info)
 
     #             elif payload_data == 'accept_entry':
-    #                 await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+    #                 await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
     #                 return await user_verification(user_id, message, users_info)
 
     #         except TypeError:
     #             pattern_telephone = r'^(8|\+7)[0-9]{10}$'
     #             if re.match(pattern_telephone, message.text):
-    #                 answer = await base.information_about_coupons(message.text, ctx.get(f'{user_id}: fio_cache'))
+    #                 answer = await Base.information_about_coupons(message.text, user_context.get(f'{user_id}: fio_cache'))
 
     #                 if answer['code'] == 'no':
     #                     keyboard = await buttons.menu_menu()
@@ -2324,7 +2033,7 @@ def process_1():
                     return await user_verification(user_id, message, users_info)
 
                 elif payload_data == 'accept_entry':
-                    await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                    await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                     return await user_verification(user_id, message, users_info)
             except TypeError:
@@ -2358,9 +2067,9 @@ def process_1():
                 if payload_data == None:
                     raise TypeError
 
-                if ctx.get(f'{user_id}: event_location') == 'tomsk':
+                if user_context.get(f'{user_id}: event_location') == 'tomsk':
                     if payload_data == 'yes':
-                        await base(user_id=user_id).events('tomsk', ctx.get(f'{user_id}: event_date'), 'VK')
+                        await Base(user_id=user_id).events('tomsk', user_context.get(f'{user_id}: event_date'), 'VK')
 
                         await message.answer(loaded_data['36'])
 
@@ -2373,12 +2082,12 @@ def process_1():
 
                 if re.match(pattern_date, payload_data):
 
-                    ctx.set(f'{user_id}: event_date', payload_data)
+                    user_context.set(f'{user_id}: event_date', payload_data)
 
                     """ДОДЕЛАТЬ - ВОЗМОЖНО УДАЛИТЬ ВООБЩЕ"""
-                    # contents = await base().base_get_events_event(ctx.get(f'{user_id}: event_location'), ctx.get(f'{user_id}: event_date'))
+                    # contents = await Base().base_get_events_event(user_context.get(f'{user_id}: event_location'), user_context.get(f'{user_id}: event_date'))
 
-                    filename = '{}{}'.format(ctx.get(f'{user_id}: event_location'), '\\' + ctx.get(f'{user_id}: event_date')) + '.txt'
+                    filename = '{}{}'.format(user_context.get(f'{user_id}: event_location'), '\\' + user_context.get(f'{user_id}: event_date')) + '.txt'
 
                     with open(filename, mode='r', encoding='utf-8') as file:
                         contents = file.read()
@@ -2391,7 +2100,7 @@ def process_1():
                     return await user_verification(user_id, message, users_info)
 
                 elif payload_data == 'accept_entry':
-                    await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                    await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                     return await user_verification(user_id, message, users_info)
 
@@ -2400,9 +2109,9 @@ def process_1():
                     return await message.answer("Выберите филиал", keyboard=keyboard)
                 elif payload_data == 'back':
                     await bot.state_dispenser.set(message.peer_id, SuperStates.FILIALS)
-                    ctx.set(f'{user_id}: anniversary', 'yes')
+                    user_context.set(f'{user_id}: anniversary', 'yes')
 
-                    await base(user_id=user_id).base_count_anniversary()
+                    await Base(user_id=user_id).base_count_anniversary()
 
                     # Формируем путь с помощью Path
                     file = Path('files_events') / 'anniversary.txt'
@@ -2652,7 +2361,7 @@ def process_1():
                     return await user_verification(user_id, message, users_info)
 
                 elif payload_data == 'accept_entry':
-                    await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                    await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                     return await user_verification(user_id, message, users_info)
 
@@ -2691,43 +2400,43 @@ def process_1():
                     return await user_verification(user_id, message, users_info)
 
                 elif payload_data == 'accept_entry':
-                    await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                    await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                     return await user_verification(user_id, message, users_info)
 
-                elif ctx.get(f'{user_id}: yes_no_cache') == 'yes' and payload_data == 'yes':
-                    ctx.set(f'{user_id}: yes_no_cache', 'None')
+                elif user_context.get(f'{user_id}: yes_no_cache') == 'yes' and payload_data == 'yes':
+                    user_context.set(f'{user_id}: yes_no_cache', 'None')
 
-                    talon_id = list(ctx.get(f'{user_id}: talon_id_cache'))
-                    esiaid = list(ctx.get(f'{user_id}: esiaid_cache'))
-                    service_id = list(ctx.get(f'{user_id}: service_id_cache'))
-                    code = list(ctx.get(f'{user_id}: code_cache'))
-                    department = list(ctx.get(f'{user_id}: department_cache'))
-                    date = list(ctx.get(f'{user_id}: date_cache'))
-                    time = list(ctx.get(f'{user_id}: time_cache'))
+                    talon_id = list(user_context.get(f'{user_id}: talon_id_cache'))
+                    esiaid = list(user_context.get(f'{user_id}: esiaid_cache'))
+                    service_id = list(user_context.get(f'{user_id}: service_id_cache'))
+                    code = list(user_context.get(f'{user_id}: code_cache'))
+                    department = list(user_context.get(f'{user_id}: department_cache'))
+                    date = list(user_context.get(f'{user_id}: date_cache'))
+                    time = list(user_context.get(f'{user_id}: time_cache'))
 
-                    index = int(ctx.get(f'{user_id}: code_counter'))
+                    index = int(user_context.get(f'{user_id}: code_counter'))
 
                     code_cache = code[index]
 
                     first_name = users_info[0].first_name
                     last_name = users_info[0].last_name
 
-                    if ctx.get(f'{user_id}: fio'):
-                        fio = ctx.get(f'{user_id}: fio')
+                    if user_context.get(f'{user_id}: fio'):
+                        fio = user_context.get(f'{user_id}: fio')
                     else:
                         fio = f"{last_name} {first_name}"
 
-                    res = await base(user_id = user_id).delete_coupons(service_id[index], talon_id[index], esiaid[index], code[index], department[index], date[index], time[index], ctx.get(f'{user_id}: tel_cache'), fio, ctx.get(f'{user_id}: talons_all'))
+                    res = await Base(user_id = user_id).delete_coupons(service_id[index], talon_id[index], esiaid[index], code[index], department[index], date[index], time[index], user_context.get(f'{user_id}: tel_cache'), fio, user_context.get(f'{user_id}: talons_all'))
 
-                    ctx.set(f'{user_id}: code_counter', index + 1)
+                    user_context.set(f'{user_id}: code_counter', index + 1)
 
                     if index >= len(code):
                         await message.answer(loaded_data['37'])
 
                         return await user_verification(user_id, message, users_info)
 
-                    ctx.set(f'{user_id}: tel_cache', 'None')
+                    user_context.set(f'{user_id}: tel_cache', 'None')
                     if res:
 
                         del talon_id[index]
@@ -2737,17 +2446,17 @@ def process_1():
                         del department[index]
                         del date[index]
 
-                        ctx.set(f'{user_id}: talon_id_cache', talon_id)
-                        ctx.set(f'{user_id}: esiaid_cache', esiaid)
-                        ctx.set(f'{user_id}: service_id_cache', service_id)
-                        ctx.set(f'{user_id}: code_cache', code)
+                        user_context.set(f'{user_id}: talon_id_cache', talon_id)
+                        user_context.set(f'{user_id}: esiaid_cache', esiaid)
+                        user_context.set(f'{user_id}: service_id_cache', service_id)
+                        user_context.set(f'{user_id}: code_cache', code)
 
-                        code = list(ctx.get(f'{user_id}: code_cache'))
+                        code = list(user_context.get(f'{user_id}: code_cache'))
 
-                        index = int(ctx.get(f'{user_id}: code_counter'))
+                        index = int(user_context.get(f'{user_id}: code_counter'))
                         if len(code) <= index:
-                            ctx.set(f'{user_id}: code_counter', 0)
-                            index = int(ctx.get(f'{user_id}: code_counter'))
+                            user_context.set(f'{user_id}: code_counter', 0)
+                            index = int(user_context.get(f'{user_id}: code_counter'))
 
                         if code == []:
                             await message.answer(f"Ваш талон {code_cache} успешно удалён.\n\nПо вашем данным талонов больше нет.")
@@ -2760,13 +2469,13 @@ def process_1():
                         keyboard = await buttons.menu_menu()
                         return await message.answer(f"Не удалось удалить талон", keyboard=keyboard)
                 elif payload_data == 'no':
-                    ctx.set(f'{user_id}: yes_no_cache', 'None')
+                    user_context.set(f'{user_id}: yes_no_cache', 'None')
 
-                    code = list(ctx.get(f'{user_id}: code_cache'))
+                    code = list(user_context.get(f'{user_id}: code_cache'))
 
-                    counter = int(ctx.get(f'{user_id}: code_counter'))
-                    ctx.set(f'{user_id}: code_counter', counter + 1)
-                    counter = int(ctx.get(f'{user_id}: code_counter'))
+                    counter = int(user_context.get(f'{user_id}: code_counter'))
+                    user_context.set(f'{user_id}: code_counter', counter + 1)
+                    counter = int(user_context.get(f'{user_id}: code_counter'))
 
                     if counter >= len(code):
                         await message.answer(loaded_data['37'])
@@ -2776,10 +2485,10 @@ def process_1():
                     keyboard = await buttons.yes_no()
                     return await message.answer(f"Хотите ли удалить талон {code[counter]}", keyboard=keyboard)
                 elif payload_data == 'yes':
-                    ctx.set(f'{user_id}: yes_no_cache', 'yes')
-                    code = list(ctx.get(f'{user_id}: code_cache'))
+                    user_context.set(f'{user_id}: yes_no_cache', 'yes')
+                    code = list(user_context.get(f'{user_id}: code_cache'))
 
-                    index = int(ctx.get(f'{user_id}: code_counter'))
+                    index = int(user_context.get(f'{user_id}: code_counter'))
 
                     keyboard = await buttons.yes_no()
                     return await message.answer(f"Вы точно хотите удалить талон {code[index]}", keyboard=keyboard)
@@ -2794,27 +2503,27 @@ def process_1():
             await errors(message, e)
 
     async def del_coupons(user_id, payload_data, message: Message):
-        ctx.set(f'{user_id}: yes_no_cache', 'yes')
+        user_context.set(f'{user_id}: yes_no_cache', 'yes')
 
-        ctx.set(f'{user_id}: talon_id_cache', [payload_data.split('_')[2]])
+        user_context.set(f'{user_id}: talon_id_cache', [payload_data.split('_')[2]])
 
-        ctx.set(f'{user_id}: esiaid_cache', [''])
+        user_context.set(f'{user_id}: esiaid_cache', [''])
 
-        ctx.set(f'{user_id}: service_id_cache', [payload_data.split('_')[9]])
+        user_context.set(f'{user_id}: service_id_cache', [payload_data.split('_')[9]])
 
-        ctx.set(f'{user_id}: code_cache', [payload_data.split('_')[3]])
+        user_context.set(f'{user_id}: code_cache', [payload_data.split('_')[3]])
 
-        ctx.set(f'{user_id}: department_cache', [payload_data.split('_')[4]])
+        user_context.set(f'{user_id}: department_cache', [payload_data.split('_')[4]])
 
-        ctx.set(f'{user_id}: date_cache', [payload_data.split('_')[5]])
+        user_context.set(f'{user_id}: date_cache', [payload_data.split('_')[5]])
 
-        ctx.set(f'{user_id}: code_counter', '0')
+        user_context.set(f'{user_id}: code_counter', '0')
 
-        ctx.set(f'{user_id}: tel_cache', payload_data.split('_')[6])
+        user_context.set(f'{user_id}: tel_cache', payload_data.split('_')[6])
 
-        ctx.set(f'{user_id}: fio', payload_data.split('_')[7])
+        user_context.set(f'{user_id}: fio', payload_data.split('_')[7])
 
-        ctx.set(f'{user_id}: time_cache', [payload_data.split('_')[8]])
+        user_context.set(f'{user_id}: time_cache', [payload_data.split('_')[8]])
 
         await bot.state_dispenser.set(message.peer_id, SuperStates.DEL_COUPONS)
         keyboard = await buttons.yes_no()
@@ -2836,38 +2545,38 @@ def process_1():
 
         async def phone_select_two(message, user_id, phone):
 
-            ctx.set(f'{user_id}: tel_cache', phone)
-            ctx.set(f'{user_id}: fio_cache', '%')
-            answer = await base.information_about_coupons(ctx.get(f'{user_id}: tel_cache'), ctx.get(f'{user_id}: fio_cache'))
+            user_context.set(f'{user_id}: tel_cache', phone)
+            user_context.set(f'{user_id}: fio_cache', '%')
+            answer = await Base.information_about_coupons(user_context.get(f'{user_id}: tel_cache'), user_context.get(f'{user_id}: fio_cache'))
             if answer['code_'] == 'no':
 
                 keyboard = await buttons.menu_menu()
-                return await message.answer(f'Талоны с номером телефона {ctx.get(f'{user_id}: phone')} не найдены.', keyboard=keyboard)
+                return await message.answer(f'Талоны с номером телефона {user_context.get(f'{user_id}: phone')} не найдены.', keyboard=keyboard)
             if answer['code_'] == 'error':
 
                 keyboard = await buttons.menu_menu()
                 return await message.answer(f'Произошла ошибка поиска талонов. Попробуйте ещё раз.', keyboard=keyboard)
 
-            await message.answer(f'Талоны с номером телефона {ctx.get(f'{user_id}: phone')}:')
+            await message.answer(f'Талоны с номером телефона {user_context.get(f'{user_id}: phone')}:')
 
             await bot.state_dispenser.set(message.peer_id, SuperStates.DEL_COUPONS)
 
-            ctx.set(f'{user_id}: talon_id_cache', answer['talon_id'])
-            ctx.set(f'{user_id}: esiaid_cache', answer['esiaid'])
-            ctx.set(f'{user_id}: service_id_cache', answer['service_id'])
-            ctx.set(f'{user_id}: code_cache', answer['code'])
-            ctx.set(f'{user_id}: department_cache', answer['department'])
-            ctx.set(f'{user_id}: date_cache', answer['dates'])
-            ctx.set(f'{user_id}: time_cache', answer['times'])
+            user_context.set(f'{user_id}: talon_id_cache', answer['talon_id'])
+            user_context.set(f'{user_id}: esiaid_cache', answer['esiaid'])
+            user_context.set(f'{user_id}: service_id_cache', answer['service_id'])
+            user_context.set(f'{user_id}: code_cache', answer['code'])
+            user_context.set(f'{user_id}: department_cache', answer['department'])
+            user_context.set(f'{user_id}: date_cache', answer['dates'])
+            user_context.set(f'{user_id}: time_cache', answer['times'])
 
-            ctx.set(f'{user_id}: talons_all', answer['talons_all'])
+            user_context.set(f'{user_id}: talons_all', answer['talons_all'])
 
-            code = ctx.get(f'{user_id}: code_cache')
+            code = user_context.get(f'{user_id}: code_cache')
 
-            index = int(ctx.get(f'{user_id}: code_counter'))
+            index = int(user_context.get(f'{user_id}: code_counter'))
             if index == -1:
-                ctx.set(f'{user_id}: code_counter', 0)
-                index = int(ctx.get(f'{user_id}: code_counter'))
+                user_context.set(f'{user_id}: code_counter', 0)
+                index = int(user_context.get(f'{user_id}: code_counter'))
 
             keyboard = await buttons.yes_no()
             return await message.answer(f"{answer['service_name_time']}.\n\nХотите ли удалить талон {code[index]}", keyboard=keyboard)
@@ -2877,7 +2586,7 @@ def process_1():
 
             users_info = await bot.api.users.get(user_ids=[user_id])
 
-            ctx.set(f'{user_id}: code_counter', 0)
+            user_context.set(f'{user_id}: code_counter', 0)
             fields = [
                 'field_1', 'field_2', 'field_3', 'field_4', 'field_5',
                 'field_6', 'field_7', 'date', 'time', 'tel_cache',
@@ -2887,7 +2596,7 @@ def process_1():
                 'application_location'
             ]
             for field in fields:
-                ctx.set(f'{user_id}: {field}', 'None')
+                user_context.set(f'{user_id}: {field}', 'None')
 
             try:
                 payload_data = await com(message)
@@ -2896,8 +2605,8 @@ def process_1():
             except TypeError:
                 pattern_telephone = PATTERN_TELEPHONE_STRICT
                 if re.match(pattern_telephone, message.text):
-                    await base(user_id=user_id).base_count('cancel_record')
-                    ani = await base(user_id = user_id).phone_select()
+                    await Base(user_id=user_id).base_count('cancel_record')
+                    ani = await Base(user_id = user_id).phone_select()
                     message.text = message.text.replace('+7', '8')
 
                     condition = False
@@ -2909,9 +2618,9 @@ def process_1():
                         condition = True
                     if condition:
 
-                        ctx.set(f'{user_id}: tel_cache', ani)
-                        ctx.set(f'{user_id}: fio_cache', '%')
-                        answer = await base.information_about_coupons(ctx.get(f'{user_id}: tel_cache'), ctx.get(f'{user_id}: fio_cache'))
+                        user_context.set(f'{user_id}: tel_cache', ani)
+                        user_context.set(f'{user_id}: fio_cache', '%')
+                        answer = await Base.information_about_coupons(user_context.get(f'{user_id}: tel_cache'), user_context.get(f'{user_id}: fio_cache'))
                         if answer['code_'] == 'no':
                             keyboard = await buttons.menu_menu()
                             return await message.answer(loaded_data['38'], keyboard=keyboard)
@@ -2921,22 +2630,22 @@ def process_1():
 
                         await bot.state_dispenser.set(message.peer_id, SuperStates.DEL_COUPONS)
 
-                        ctx.set(f'{user_id}: talon_id_cache', answer['talon_id'])
-                        ctx.set(f'{user_id}: esiaid_cache', answer['esiaid'])
-                        ctx.set(f'{user_id}: service_id_cache', answer['service_id'])
-                        ctx.set(f'{user_id}: code_cache', answer['code'])
-                        ctx.set(f'{user_id}: department_cache', answer['department'])
-                        ctx.set(f'{user_id}: date_cache', answer['dates'])
-                        ctx.set(f'{user_id}: time_cache', answer['times'])
+                        user_context.set(f'{user_id}: talon_id_cache', answer['talon_id'])
+                        user_context.set(f'{user_id}: esiaid_cache', answer['esiaid'])
+                        user_context.set(f'{user_id}: service_id_cache', answer['service_id'])
+                        user_context.set(f'{user_id}: code_cache', answer['code'])
+                        user_context.set(f'{user_id}: department_cache', answer['department'])
+                        user_context.set(f'{user_id}: date_cache', answer['dates'])
+                        user_context.set(f'{user_id}: time_cache', answer['times'])
 
-                        ctx.set(f'{user_id}: talons_all', answer['talons_all'])
+                        user_context.set(f'{user_id}: talons_all', answer['talons_all'])
 
-                        code = ctx.get(f'{user_id}: code_cache')
+                        code = user_context.get(f'{user_id}: code_cache')
 
-                        index = int(ctx.get(f'{user_id}: code_counter'))
+                        index = int(user_context.get(f'{user_id}: code_counter'))
                         if index == -1:
-                            ctx.set(f'{user_id}: code_counter', 0)
-                            index = int(ctx.get(f'{user_id}: code_counter'))
+                            user_context.set(f'{user_id}: code_counter', 0)
+                            index = int(user_context.get(f'{user_id}: code_counter'))
 
                         keyboard = await buttons.yes_no()
 
@@ -2951,10 +2660,10 @@ def process_1():
                     return await message.answer(loaded_data['40'], keyboard=keyboard)
 
             if payload_data == 'events' or payload_data == 'back' or payload_data == 'menu':
-                ctx.set(f'{user_id}: anniversary', 'None')
+                user_context.set(f'{user_id}: anniversary', 'None')
 
             if payload_data == 'support':
-                await base(user_id=user_id).base_count('support')
+                await Base(user_id=user_id).base_count('support')
                 await bot.state_dispenser.set(message.peer_id, SuperStates.SUPPORT)
                 keyboard = await buttons.menu_menu()
                 return await message.answer(loaded_data['41'], keyboard=keyboard)
@@ -2963,7 +2672,7 @@ def process_1():
 
                 return await user_verification(user_id, message, users_info)
             elif payload_data == 'accept_entry':
-                await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                 return await user_verification(user_id, message, users_info)
 
@@ -2977,8 +2686,8 @@ def process_1():
                 return await message.answer("Выберите район для записи", keyboard=keyboard)
 
             if payload_data in privileges:
-                ctx.set(f'{user_id}: application_location', '2')
-                ctx.set(f'{user_id}: category_application', privileges[payload_data])
+                user_context.set(f'{user_id}: application_location', '2')
+                user_context.set(f'{user_id}: category_application', privileges[payload_data])
 
             await debug_print('ВЫХОД ИЗ ФУНКЦИИ filials', user_id)
             if payload_data == 'filials' or payload_data == 'back_1' or payload_data == 'back':
@@ -2987,43 +2696,43 @@ def process_1():
                 # await message.answer("Проведение технических работ")
                 # return await user_verification(user_id, message, users_info)
 
-                answer = await base(user_id = user_id).phone_select()
+                answer = await Base(user_id = user_id).phone_select()
 
-                agreement_answer = await base(user_id = user_id).agreement_select()
+                agreement_answer = await Base(user_id = user_id).agreement_select()
 
-                ctx.set(f'{user_id}: agreement', 'filials')
+                user_context.set(f'{user_id}: agreement', 'filials')
 
                 if not agreement_answer[0] or agreement_answer[1] == '0':
                     # Формируем путь с помощью Path
                     file = Path('files') / 'agreement.txt'
 
                     if answer[0]:
-                        ctx.set(f'{user_id}: phone', answer[1][0][0])
+                        user_context.set(f'{user_id}: phone', answer[1][0][0])
                     await bot.state_dispenser.set(message.peer_id, SuperStates.AGREEMENT_INPUT)
                     keyboard = await buttons.agreement_yes_no()
                     return await message.answer(f"{await read_file(file)}", keyboard=keyboard)
 
-                await base(user_id=user_id).base_count('record')
+                await Base(user_id=user_id).base_count('record')
                 keyboard = await buttons.filials()
                 await message.answer(loaded_data['27'])
                 await message.answer(loaded_data['28'])
                 return await message.answer("Выберите филиал", keyboard=keyboard)
 
-            elif ctx.get(f'{user_id}: anniversary') == 'yes' and payload_data == 'yes':
-                ctx.set(f'{user_id}: anniversary', 'None')
+            elif user_context.get(f'{user_id}: anniversary') == 'yes' and payload_data == 'yes':
+                user_context.set(f'{user_id}: anniversary', 'None')
                 await bot.state_dispenser.set(message.peer_id, SuperStates.ANNIVERSARY)
                 keyboard = await buttons.menu_menu()
                 return await message.answer(loaded_data['42'], keyboard=keyboard)
-            elif ctx.get(f'{user_id}: anniversary') == 'yes' and (payload_data == 'back' or payload_data == 'menu'):
+            elif user_context.get(f'{user_id}: anniversary') == 'yes' and (payload_data == 'back' or payload_data == 'menu'):
 
-                ctx.set(f'{user_id}: anniversary', 'None')
+                user_context.set(f'{user_id}: anniversary', 'None')
 
                 return await user_verification(user_id, message, users_info)
 
             elif payload_data == 'anniversary':
-                ctx.set(f'{user_id}: anniversary', 'yes')
+                user_context.set(f'{user_id}: anniversary', 'yes')
 
-                await base(user_id=user_id).base_count('anniversary')
+                await Base(user_id=user_id).base_count('anniversary')
 
                 # Формируем путь с помощью Path
                 file = Path('files_events') / 'anniversary.txt'
@@ -3032,10 +2741,10 @@ def process_1():
                 return await message.answer(f"{await read_file(file)}", keyboard=keyboard)
 
             elif payload_data == 'events' or payload_data == 'back_1' or payload_data == 'back':
-                await base(user_id=user_id).base_count('event')
+                await Base(user_id=user_id).base_count('event')
                 await bot.state_dispenser.set(message.peer_id, SuperStates.EVENTS)
 
-                ctx.set(f'{user_id}: event_location', 'tomsk')
+                user_context.set(f'{user_id}: event_location', 'tomsk')
                 keyboard = await buttons.events('tomsk')
                 payload = get_first_button_cmd(keyboard)
                 if payload == 'back_1':
@@ -3045,29 +2754,29 @@ def process_1():
 
             elif payload_data == 'application':
 
-                answer = await base(user_id = user_id).phone_select()
+                answer = await Base(user_id = user_id).phone_select()
 
-                agreement_answer = await base(user_id = user_id).agreement_select()
+                agreement_answer = await Base(user_id = user_id).agreement_select()
 
-                ctx.set(f'{user_id}: agreement', 'application')
+                user_context.set(f'{user_id}: agreement', 'application')
 
                 if not agreement_answer[0] or agreement_answer[1] == '0':
                     # Формируем путь с помощью Path
                     file = Path('files') / 'agreement.txt'
 
                     if answer[0]:
-                        ctx.set(f'{user_id}: phone', answer[1][0][0])
+                        user_context.set(f'{user_id}: phone', answer[1][0][0])
                     await bot.state_dispenser.set(message.peer_id, SuperStates.AGREEMENT_INPUT)
                     keyboard = await buttons.agreement_yes_no()
                     return await message.answer(f"{await read_file(file)}", keyboard=keyboard)
 
-                await base(user_id=user_id).base_count('application')
+                await Base(user_id=user_id).base_count('application')
                 keyboard = await buttons.application()
                 return await message.answer(loaded_data['29'], keyboard=keyboard)
 
-            elif payload_data == 'application_4' or ctx.get(f'{user_id}: category_application') != 'None':
-                if ctx.get(f'{user_id}: application_location') == 'None':
-                    ctx.set(f'{user_id}: application_location', '1')
+            elif payload_data == 'application_4' or user_context.get(f'{user_id}: category_application') != 'None':
+                if user_context.get(f'{user_id}: application_location') == 'None':
+                    user_context.set(f'{user_id}: application_location', '1')
                 await bot.state_dispenser.set(message.peer_id, SuperStates.APPLICATION)
                 keyboard = await buttons.menu_menu()
                 return await message.answer(loaded_data['45'], keyboard=keyboard)
@@ -3094,61 +2803,61 @@ def process_1():
                 return await message.answer(loaded_data['46'], keyboard=keyboard)
 
             elif payload_data == 'grade':
-                await base(user_id=user_id).base_count('grade')
+                await Base(user_id=user_id).base_count('grade')
                 await bot.state_dispenser.set(message.peer_id, SuperStates.GRADE)
 
-                ctx.set(f"{user_id}: number_statement", 'None')
-                ctx.set(f"{user_id}: number_date", 'None')
-                ctx.set(f"{user_id}: number_department", 'None')
-                ctx.set(f"{user_id}: number_grade", 'None')
-                ctx.set(f"{user_id}: number_waiting_time", 'None')
-                ctx.set(f"{user_id}: number_time", 'None')
-                ctx.set(f"{user_id}: number_employee", 'None')
-                ctx.set(f"{user_id}: number_review", 'None')
+                user_context.set(f"{user_id}: number_statement", 'None')
+                user_context.set(f"{user_id}: number_date", 'None')
+                user_context.set(f"{user_id}: number_department", 'None')
+                user_context.set(f"{user_id}: number_grade", 'None')
+                user_context.set(f"{user_id}: number_waiting_time", 'None')
+                user_context.set(f"{user_id}: number_time", 'None')
+                user_context.set(f"{user_id}: number_employee", 'None')
+                user_context.set(f"{user_id}: number_review", 'None')
 
                 keyboard = await buttons.button_review()
                 return await message.answer(loaded_data['47'], keyboard=keyboard)
 
             elif payload_data == 'status':
-                await base(user_id=user_id).base_count('status')
+                await Base(user_id=user_id).base_count('status')
                 await bot.state_dispenser.set(message.peer_id, SuperStates.STATUS)
                 keyboard = await buttons.menu_menu()
                 return await message.answer(loaded_data['48'], keyboard=keyboard)
 
             elif payload_data == 'information_coupons':
 
-                await base(user_id=user_id).base_count('inf')
+                await Base(user_id=user_id).base_count('inf')
 
-                ctx.set(f'{user_id}: information_about_coupons', 'None')
+                user_context.set(f'{user_id}: information_about_coupons', 'None')
 
-                answer = await base.information_about_coupons(ctx.get(f"{user_id}: phone"), ctx.get(f'{user_id}: fio_cache'))
+                answer = await Base.information_about_coupons(user_context.get(f"{user_id}: phone"), user_context.get(f'{user_id}: fio_cache'))
 
                 if answer['code_'] == 'no':
                     keyboard = await buttons.menu_menu()
-                    return await message.answer(f'Талоны с номером телефона {ctx.get(f'{user_id}: phone')} не найдены.', keyboard=keyboard)
+                    return await message.answer(f'Талоны с номером телефона {user_context.get(f'{user_id}: phone')} не найдены.', keyboard=keyboard)
                 if answer['code_'] == 'error':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(f'Произошла ошибка поиска талонов. Попробуйте ещё раз.', keyboard=keyboard)
                 keyboard = await buttons.menu_menu()
-                await message.answer(f'Талоны с номером телефона {ctx.get(f'{user_id}: phone')}:')
+                await message.answer(f'Талоны с номером телефона {user_context.get(f'{user_id}: phone')}:')
                 return await message.answer(f"{answer['service_name_time']}\n\nНе ранее, чем за 30 минут до начала приема Вам необходимо активировать талон в терминале электронной очереди по пин-коду.", keyboard=keyboard)
 
             elif payload_data == 'information_mfc':
                 # await message.answer('🎅В связи с новогодними праздниками МФЦ Томской области изменит режим работы.\n\n🏢Отделы МФЦ Томской области:\n🎄с 31 декабря по 11 января - нерабочие праздничные дни.\n🗓С 12 января отделы МФЦ продолжат работу в обычном режиме.\n\n☎️Горячая линия МФЦ (8-800-350-08-50, 602-999):\n🎄30 декабря - до 20:00;\n🎄с 31 декабря по 1 января - нерабочие праздничные дни;\n🎄2 января - с 8:00 и далее круглосуточно.')
-                await base(user_id=user_id).base_count('cons')
+                await Base(user_id=user_id).base_count('cons')
                 await bot.state_dispenser.set(message.peer_id, SuperStates.INF_MFC)
                 keyboard = await buttons.filials('54321')
                 return await message.answer("Выберите филиал", keyboard=keyboard)
             elif payload_data == 'consultation':
-                await base(user_id=user_id).base_count('cons')
+                await Base(user_id=user_id).base_count('cons')
                 await bot.state_dispenser.set(message.peer_id, SuperStates.CONSULTATION)
                 keyboard = await buttons.consultation()
                 return await message.answer("Выберите услугу", keyboard=keyboard)
 
             elif payload_data == 'delete_coupons':
-                await base(user_id=user_id).base_count('cancel_record')
+                await Base(user_id=user_id).base_count('cancel_record')
 
-                ani = await base(user_id = user_id).phone_select()
+                ani = await Base(user_id = user_id).phone_select()
                 await phone_select_two(message, user_id, ani[1][0][0])
 
             elif payload_data.startswith('delete_coupons_'):
@@ -3201,7 +2910,7 @@ def process_1():
                 return await user_verification(user_id, message, users_info)
 
             elif payload_data == 'accept_entry':
-                await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                 return await user_verification(user_id, message, users_info)
 
@@ -3211,7 +2920,7 @@ def process_1():
                 return await message.answer("Выберите банк", keyboard=keyboard)
 
             elif payload_data in list(services_id.keys()):
-                ctx.set(f'{user_id}: service', services_id[payload_data])
+                user_context.set(f'{user_id}: service', services_id[payload_data])
                 await bot.state_dispenser.set(message.peer_id, SuperStates.FIELDS)
                 keyboard = await buttons.params_1()
                 await message.answer("Назовите количество дел", keyboard=keyboard)
@@ -3224,7 +2933,7 @@ def process_1():
             if payload_data in commands_1:
                 function_to_call = commands_1[payload_data]
                 await bot.state_dispenser.set(message.peer_id, SuperStates.SERVICE)
-                keyboard = await function_to_call(ctx.get(f'{user_id}: department'))
+                keyboard = await function_to_call(user_context.get(f'{user_id}: department'))
 
                 return await message.answer("Выберите услугу", keyboard=keyboard)
 
@@ -3234,8 +2943,8 @@ def process_1():
                 return await message.answer("Выберите район для записи", keyboard=keyboard)
 
             if payload_data in filials_id.keys():
-                ctx.set(f'{user_id}: department', filials_id[payload_data])
-                keyboard = await buttons.services_section(ctx.get(f'{user_id}: department'))
+                user_context.set(f'{user_id}: department', filials_id[payload_data])
+                keyboard = await buttons.services_section(user_context.get(f'{user_id}: department'))
                 return await message.answer("Выберите услугу", keyboard=keyboard)
             await debug_print('ВЫХОД ИЗ ФУНКЦИИ department', user_id)
             return
@@ -3323,8 +3032,8 @@ def process_1():
         my_list = [item for item in text.split('_') if item]
 
         result = ", ".join([f"{my_list[i]} {my_list[i+1]}" for i in range(0, len(my_list), 2)])
-        result += f', {ctx.get(f'{user_id}: phone')}'
-        result += f', {ctx.get(f'{user_id}: department')}'
+        result += f', {user_context.get(f'{user_id}: phone')}'
+        result += f', {user_context.get(f'{user_id}: department')}'
 
         # Асинхронно записываем текст в файл
         async with aiofiles.open(file_path, 'w', encoding='utf-8') as file:
@@ -3362,27 +3071,27 @@ def process_1():
                     raise TypeError
 
                 if payload_data == 'menu':
-                    ctx.set(f'{user_id}: svo_', '')
-                    ctx.set(f'{user_id}: svo_text', '')
-                    ctx.set(f'{user_id}: svo_razd', '')
-                    ctx.set(f'{user_id}: svo_text_1', '')
+                    user_context.set(f'{user_id}: svo_', '')
+                    user_context.set(f'{user_id}: svo_text', '')
+                    user_context.set(f'{user_id}: svo_razd', '')
+                    user_context.set(f'{user_id}: svo_text_1', '')
 
                     return await user_verification(user_id, message, users_info)
 
                 if payload_data == 'back':
                     await bot.state_dispenser.set(message.peer_id, SuperStates.SERVICE)
-                    ctx.set(f'{user_id}: svo_', '')
-                    ctx.set(f'{user_id}: svo_text', '')
-                    ctx.set(f'{user_id}: svo_razd', '')
-                    ctx.set(f'{user_id}: svo_text_1', '')
-                    keyboard = await buttons.services_svo(ctx.get(f'{user_id}: department'))
+                    user_context.set(f'{user_id}: svo_', '')
+                    user_context.set(f'{user_id}: svo_text', '')
+                    user_context.set(f'{user_id}: svo_razd', '')
+                    user_context.set(f'{user_id}: svo_text_1', '')
+                    keyboard = await buttons.services_svo(user_context.get(f'{user_id}: department'))
                     return await message.answer(loaded_data['16'], keyboard=keyboard)
 
                 if payload_data == 'go_svo':
-                    svo_razd = str(ctx.get(f'{user_id}: svo_razd')).split(', ')
-                    svo_text_1 = str(ctx.get(f'{user_id}: svo_text_1')).split(', ')
+                    svo_razd = str(user_context.get(f'{user_id}: svo_razd')).split(', ')
+                    svo_text_1 = str(user_context.get(f'{user_id}: svo_text_1')).split(', ')
 
-                    decoded_string = 'Услуги СВО\nКатегория: ' + str(ctx.get(f'{user_id}: svo_')) + '\n\nЛичные данные: ' + str(ctx.get(f'{user_id}: svo_text')) + '\n\n'
+                    decoded_string = 'Услуги СВО\nКатегория: ' + str(user_context.get(f'{user_id}: svo_')) + '\n\nЛичные данные: ' + str(user_context.get(f'{user_id}: svo_text')) + '\n\n'
 
                     for i in range(len(svo_razd)):
                         decoded_string += 'Услуга: ' + svo_razd[i] + '\n' + 'Данные: ' + svo_text_1[i] + '\n\n'
@@ -3394,23 +3103,23 @@ def process_1():
 
                     decoded_string = str(decoded_string).replace("_", " ") + '_' + 'Цена'
 
-                    await base.base_svo(user_id, ctx.get(f'{user_id}: department'), decoded_string)
+                    await Base.base_svo(user_id, user_context.get(f'{user_id}: department'), decoded_string)
 
                     await message.answer(loaded_data['14'])
 
                     return await user_verification(user_id, message, users_info)
 
                 if payload_data == 'vibr_svo':
-                    if ctx.get(f'{user_id}: svo_') == 'Участник СВО':
+                    if user_context.get(f'{user_id}: svo_') == 'Участник СВО':
                         keyboard = await buttons.services_svo_1()
                         return await message.answer("Выберите услугу", keyboard=keyboard)
-                    elif ctx.get(f'{user_id}: svo_') == 'Ветеран боевых действий':
+                    elif user_context.get(f'{user_id}: svo_') == 'Ветеран боевых действий':
                         keyboard = await buttons.services_svo_2()
                         return await message.answer("Выберите услугу", keyboard=keyboard)
-                    elif ctx.get(f'{user_id}: svo_') == 'Члены семьи участников СВО':
+                    elif user_context.get(f'{user_id}: svo_') == 'Члены семьи участников СВО':
                         keyboard = await buttons.services_svo_3()
                         return await message.answer("Выберите услугу", keyboard=keyboard)
-                    elif ctx.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
+                    elif user_context.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
                         keyboard = await buttons.services_svo_4()
                         return await message.answer("Выберите услугу", keyboard=keyboard)
 
@@ -3420,108 +3129,108 @@ def process_1():
                 elif payload_data == 'ЦСПН':
                     return await message.answer(loaded_data['95'])
 
-                if ctx.get(f'{user_id}: svo_razd'):
-                    svo_razd = ctx.get(f'{user_id}: svo_razd')
-                    ctx.set(f'{user_id}: svo_razd', svo_razd + ', ' + payload_data)
+                if user_context.get(f'{user_id}: svo_razd'):
+                    svo_razd = user_context.get(f'{user_id}: svo_razd')
+                    user_context.set(f'{user_id}: svo_razd', svo_razd + ', ' + payload_data)
                 else:
-                    ctx.set(f'{user_id}: svo_razd', payload_data)
+                    user_context.set(f'{user_id}: svo_razd', payload_data)
 
                 """Добавление данных по услугам"""
 
-                if payload_data == 'Налоговая льгота' and ctx.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
+                if payload_data == 'Налоговая льгота' and user_context.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['92'], keyboard=keyboard)
 
-                elif payload_data == 'Компенсация за ЖКУ' and ctx.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
+                elif payload_data == 'Компенсация за ЖКУ' and user_context.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
                     keyboard = await buttons.services_svo_5()
                     return await message.answer(loaded_data['93'], keyboard=keyboard)
 
-                elif payload_data == 'Сертификат на газификацию' and ctx.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
+                elif payload_data == 'Сертификат на газификацию' and user_context.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['96'], keyboard=keyboard)
 
-                elif payload_data == 'Выплаты на ремонт' and ctx.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
+                elif payload_data == 'Выплаты на ремонт' and user_context.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['97'], keyboard=keyboard)
 
-                elif payload_data == 'Пособия на детей' and ctx.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
+                elif payload_data == 'Пособия на детей' and user_context.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['98'], keyboard=keyboard)
 
-                elif payload_data == 'Ежемесячная денежная компенсация' and ctx.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
+                elif payload_data == 'Ежемесячная денежная компенсация' and user_context.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['99'], keyboard=keyboard)
 
-                elif payload_data == 'Налоговая льгота' and ctx.get(f'{user_id}: svo_') == 'Участник СВО':
+                elif payload_data == 'Налоговая льгота' and user_context.get(f'{user_id}: svo_') == 'Участник СВО':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['100'], keyboard=keyboard)
 
-                elif payload_data == 'Денежная компенсация' and ctx.get(f'{user_id}: svo_') == 'Участник СВО':
+                elif payload_data == 'Денежная компенсация' and user_context.get(f'{user_id}: svo_') == 'Участник СВО':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['83'], keyboard=keyboard)
 
-                elif payload_data == 'Санаторий для детей' and ctx.get(f'{user_id}: svo_') == 'Участник СВО':
+                elif payload_data == 'Санаторий для детей' and user_context.get(f'{user_id}: svo_') == 'Участник СВО':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['84'], keyboard=keyboard)
 
-                elif payload_data == 'Детский лагерь' and ctx.get(f'{user_id}: svo_') == 'Участник СВО':
+                elif payload_data == 'Детский лагерь' and user_context.get(f'{user_id}: svo_') == 'Участник СВО':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['85'], keyboard=keyboard)
 
-                elif payload_data == 'Налоговая льгота' and ctx.get(f'{user_id}: svo_') == 'Ветеран боевых действий':
+                elif payload_data == 'Налоговая льгота' and user_context.get(f'{user_id}: svo_') == 'Ветеран боевых действий':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['86'], keyboard=keyboard)
 
-                elif payload_data == 'Компенсация за ЖКУ' and ctx.get(f'{user_id}: svo_') == 'Ветеран боевых действий':
+                elif payload_data == 'Компенсация за ЖКУ' and user_context.get(f'{user_id}: svo_') == 'Ветеран боевых действий':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['87'], keyboard=keyboard)
 
-                elif payload_data == 'Сертификат на газификацию' and ctx.get(f'{user_id}: svo_') == 'Ветеран боевых действий':
+                elif payload_data == 'Сертификат на газификацию' and user_context.get(f'{user_id}: svo_') == 'Ветеран боевых действий':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['88'], keyboard=keyboard)
 
-                elif payload_data == 'Налоговая льгота' and ctx.get(f'{user_id}: svo_') == 'Члены семьи участников СВО':
+                elif payload_data == 'Налоговая льгота' and user_context.get(f'{user_id}: svo_') == 'Члены семьи участников СВО':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['89'], keyboard=keyboard)
 
-                elif payload_data == 'Санаторий для детей' and ctx.get(f'{user_id}: svo_') == 'Члены семьи участников СВО':
+                elif payload_data == 'Санаторий для детей' and user_context.get(f'{user_id}: svo_') == 'Члены семьи участников СВО':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['90'], keyboard=keyboard)
 
-                elif payload_data == 'Детский лагерь' and ctx.get(f'{user_id}: svo_') == 'Члены семьи участников СВО':
+                elif payload_data == 'Детский лагерь' and user_context.get(f'{user_id}: svo_') == 'Члены семьи участников СВО':
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['91'], keyboard=keyboard)
 
                 else:
-                    if ctx.get(f'{user_id}: svo_razd') == 'Компенсация за ЖКУ':
+                    if user_context.get(f'{user_id}: svo_razd') == 'Компенсация за ЖКУ':
                         keyboard = await buttons.services_svo_5()
                         return await message.answer(loaded_data['93'], keyboard=keyboard)
                     keyboard = await buttons.services_svo_11()
                     return await message.answer("Выберите действие", keyboard=keyboard)
 
             except TypeError:
-                if ctx.get(f'{user_id}: svo_text_1'):
-                    svo_text_1 = ctx.get(f'{user_id}: svo_text_1')
-                    ctx.set(f'{user_id}: svo_text_1', svo_text_1 + ', ' + message.text)
+                if user_context.get(f'{user_id}: svo_text_1'):
+                    svo_text_1 = user_context.get(f'{user_id}: svo_text_1')
+                    user_context.set(f'{user_id}: svo_text_1', svo_text_1 + ', ' + message.text)
                     keyboard = await buttons.services_svo_11()
                     return await message.answer("Выберите действие", keyboard=keyboard)
-                elif ctx.get(f'{user_id}: svo_text'):
-                    ctx.set(f'{user_id}: svo_text_1', message.text)
+                elif user_context.get(f'{user_id}: svo_text'):
+                    user_context.set(f'{user_id}: svo_text_1', message.text)
                     keyboard = await buttons.services_svo_11()
                     return await message.answer("Выберите действие", keyboard=keyboard)
                 else:
-                    ctx.set(f'{user_id}: svo_text', message.text)
+                    user_context.set(f'{user_id}: svo_text', message.text)
 
-                if ctx.get(f'{user_id}: svo_') == 'Участник СВО':
+                if user_context.get(f'{user_id}: svo_') == 'Участник СВО':
                     keyboard = await buttons.services_svo_1()
                     return await message.answer("Выберите услугу", keyboard=keyboard)
-                elif ctx.get(f'{user_id}: svo_') == 'Ветеран боевых действий':
+                elif user_context.get(f'{user_id}: svo_') == 'Ветеран боевых действий':
                     keyboard = await buttons.services_svo_2()
                     return await message.answer("Выберите услугу", keyboard=keyboard)
-                elif ctx.get(f'{user_id}: svo_') == 'Члены семьи участников СВО':
+                elif user_context.get(f'{user_id}: svo_') == 'Члены семьи участников СВО':
                     keyboard = await buttons.services_svo_3()
                     return await message.answer("Выберите услугу", keyboard=keyboard)
-                elif ctx.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
+                elif user_context.get(f'{user_id}: svo_') == 'Семья погибших военнослужащих':
                     keyboard = await buttons.services_svo_4()
                     return await message.answer("Выберите услугу", keyboard=keyboard)
 
@@ -3553,7 +3262,7 @@ def process_1():
                     7: 'Информация о зарегистрированных лицах:_',
                     8: 'Акт приёма-передачи:_'}
 
-        counter = ctx.get(f'{user_id}: file_data_counter')
+        counter = user_context.get(f'{user_id}: file_data_counter')
 
         try:
             await debug_print('ВХОД В ФУНКЦИЮ service', user_id)
@@ -3566,15 +3275,15 @@ def process_1():
                 if payload_data == 'yes':
                     await message.answer(loaded_data['60'])
 
-                    await write_to_file(user_id, ctx.get(f'{user_id}: file_data'))
+                    await write_to_file(user_id, user_context.get(f'{user_id}: file_data'))
 
                     """ВКЛЮЧИТЬ ДЛЯ ЗАПИСИ НА СОСТАВЛЕНИЕ ДОГОВОРА ПОСЛЕ ОТПРАВКИ ДОКУМЕНТОВ"""
-                    # if ctx.get(f'{user_id}: fields_nedv') == 'yes':
+                    # if user_context.get(f'{user_id}: fields_nedv') == 'yes':
 
-                    #     date = ctx.get(f'{user_id}: date')
-                    #     time = ctx.get(f'{user_id}: time')
-                    #     department = ctx.get(f'{user_id}: department')
-                    #     service = ctx.get(f'{user_id}: service')
+                    #     date = user_context.get(f'{user_id}: date')
+                    #     time = user_context.get(f'{user_id}: time')
+                    #     department = user_context.get(f'{user_id}: department')
+                    #     service = user_context.get(f'{user_id}: service')
 
                     #     SSR = (date, time, department, service)
 
@@ -3582,9 +3291,9 @@ def process_1():
                     #     print('--------------------------------------------')
                     #     await debug_print('ПЕРЕД ВХОДОМ В ФУНКЦИЮ date_1 1111', user_id)
                     #     print(*SSR)
-                    #     print(ctx.get(f'{user_id}: fields'))
+                    #     print(user_context.get(f'{user_id}: fields'))
                     #     print('--------------------------------------------')
-                    #     keyboard = await buttons.date_1(*SSR, ctx.get(f'{user_id}: fields'))
+                    #     keyboard = await buttons.date_1(*SSR, user_context.get(f'{user_id}: fields'))
                     #     keyboard_data = json.loads(keyboard)
                     #     payload_value = keyboard_data['buttons'][0][0]['action']['payload']
                     #     payload = eval(str(payload_value))['cmd']
@@ -3606,11 +3315,11 @@ def process_1():
                     message_text = 'Договор будет иметь силу акта'
 
                 if payload_data in ('dog_1', 'dog_2', 'dog_3'):
-                    file_data = ctx.get(f'{user_id}: file_data')
+                    file_data = user_context.get(f'{user_id}: file_data')
                     if not file_data:
                         file_data = ''
                     file_data += data_str[counter] + message_text + '_'
-                    ctx.set(f'{user_id}: file_data', file_data)
+                    user_context.set(f'{user_id}: file_data', file_data)
 
                 if payload_data == 'dog_1':
                     keyboard = await buttons.menu_menu_file('7')
@@ -3620,15 +3329,15 @@ def process_1():
                 elif payload_data in ('dog_2', 'dog_3'):
                     await message.answer(loaded_data['60'])
 
-                    await write_to_file(user_id, ctx.get(f'{user_id}: file_data'))
+                    await write_to_file(user_id, user_context.get(f'{user_id}: file_data'))
 
                     """ВКЛЮЧИТЬ ДЛЯ ЗАПИСИ НА СОСТАВЛЕНИЕ ДОГОВОРА ПОСЛЕ ОТПРАВКИ ДОКУМЕНТОВ"""
-                    # if ctx.get(f'{user_id}: fields_nedv') == 'yes':
+                    # if user_context.get(f'{user_id}: fields_nedv') == 'yes':
 
-                    #     date = ctx.get(f'{user_id}: date')
-                    #     time = ctx.get(f'{user_id}: time')
-                    #     department = ctx.get(f'{user_id}: department')
-                    #     service = ctx.get(f'{user_id}: service')
+                    #     date = user_context.get(f'{user_id}: date')
+                    #     time = user_context.get(f'{user_id}: time')
+                    #     department = user_context.get(f'{user_id}: department')
+                    #     service = user_context.get(f'{user_id}: service')
 
                     #     SSR = (date, time, department, service)
 
@@ -3636,9 +3345,9 @@ def process_1():
                     #     print('--------------------------------------------')
                     #     await debug_print('ПЕРЕД ВХОДОМ В ФУНКЦИЮ date_1 1111', user_id)
                     #     print(*SSR)
-                    #     print(ctx.get(f'{user_id}: fields'))
+                    #     print(user_context.get(f'{user_id}: fields'))
                     #     print('--------------------------------------------')
-                    #     keyboard = await buttons.date_1(*SSR, ctx.get(f'{user_id}: fields'))
+                    #     keyboard = await buttons.date_1(*SSR, user_context.get(f'{user_id}: fields'))
                     #     keyboard_data = json.loads(keyboard)
                     #     payload_value = keyboard_data['buttons'][0][0]['action']['payload']
                     #     payload = eval(str(payload_value))['cmd']
@@ -3653,19 +3362,19 @@ def process_1():
                 pattern_telephone = PATTERN_TELEPHONE_STRICT
                 if re.match(pattern_telephone, message.text) and counter == 8:
 
-                    ctx.set(f'{user_id}: phone', message.text)
+                    user_context.set(f'{user_id}: phone', message.text)
 
                     await message.answer(loaded_data['60'])
 
-                    await write_to_file(user_id, ctx.get(f'{user_id}: file_data'))
+                    await write_to_file(user_id, user_context.get(f'{user_id}: file_data'))
 
                     """ВКЛЮЧИТЬ ДЛЯ ЗАПИСИ НА СОСТАВЛЕНИЕ ДОГОВОРА ПОСЛЕ ОТПРАВКИ ДОКУМЕНТОВ"""
-                    # if ctx.get(f'{user_id}: fields_nedv') == 'yes':
+                    # if user_context.get(f'{user_id}: fields_nedv') == 'yes':
 
-                    #     date = ctx.get(f'{user_id}: date')
-                    #     time = ctx.get(f'{user_id}: time')
-                    #     department = ctx.get(f'{user_id}: department')
-                    #     service = ctx.get(f'{user_id}: service')
+                    #     date = user_context.get(f'{user_id}: date')
+                    #     time = user_context.get(f'{user_id}: time')
+                    #     department = user_context.get(f'{user_id}: department')
+                    #     service = user_context.get(f'{user_id}: service')
 
                     #     SSR = (date, time, department, service)
 
@@ -3673,9 +3382,9 @@ def process_1():
                     #     print('--------------------------------------------')
                     #     await debug_print('ПЕРЕД ВХОДОМ В ФУНКЦИЮ date_1 1111', user_id)
                     #     print(*SSR)
-                    #     print(ctx.get(f'{user_id}: fields'))
+                    #     print(user_context.get(f'{user_id}: fields'))
                     #     print('--------------------------------------------')
-                    #     keyboard = await buttons.date_1(*SSR, ctx.get(f'{user_id}: fields'))
+                    #     keyboard = await buttons.date_1(*SSR, user_context.get(f'{user_id}: fields'))
                     #     keyboard_data = json.loads(keyboard)
                     #     payload_value = keyboard_data['buttons'][0][0]['action']['payload']
                     #     payload = eval(str(payload_value))['cmd']
@@ -3686,15 +3395,15 @@ def process_1():
 
                     return await user_verification(user_id, message, users_info)
 
-                if ctx.get(f'{user_id}: file') == 'yes':
+                if user_context.get(f'{user_id}: file') == 'yes':
 
-                    counter = ctx.get(f'{user_id}: file_data_counter')
+                    counter = user_context.get(f'{user_id}: file_data_counter')
 
                     if not counter:
                         counter = 1
                     else:
                         counter += 1
-                    ctx.set(f'{user_id}: file_data_counter', counter)
+                    user_context.set(f'{user_id}: file_data_counter', counter)
 
                     if counter == 1:
                         name_file = 'salesman_passport'
@@ -3707,14 +3416,14 @@ def process_1():
                     elif counter == 5:
                         name_file = 'right'
                     elif 6 <= counter <= 8:
-                        file_data = ctx.get(f'{user_id}: file_data')
+                        file_data = user_context.get(f'{user_id}: file_data')
                         if not file_data:
                             file_data = ''
                         if not message.text:
                             file_data += data_str[counter] + 'Нет данных' + '_'
                         else:
                             file_data += data_str[counter] + message.text + '_'
-                        ctx.set(f'{user_id}: file_data', file_data)
+                        user_context.set(f'{user_id}: file_data', file_data)
 
                         if counter == 6:
                             keyboard = await buttons.menu_menu_file('6')
@@ -3729,7 +3438,7 @@ def process_1():
                         elif counter == 8:
                             await message.answer(loaded_data['64'])
                             keyboard = await buttons.yes_no()
-                            await message.answer(f"Использовать ваш номер телефона {ctx.get(f'{user_id}: phone')} ?", keyboard=keyboard)
+                            await message.answer(f"Использовать ваш номер телефона {user_context.get(f'{user_id}: phone')} ?", keyboard=keyboard)
                             return
 
                     if counter <=5:
@@ -3740,14 +3449,14 @@ def process_1():
                             await message.answer(f"{file[1]}", keyboard=keyboard)
                             return
                         else:
-                            file_data = ctx.get(f'{user_id}: file_data')
+                            file_data = user_context.get(f'{user_id}: file_data')
                             if not file_data:
                                 file_data = ''
                             if not message.text:
                                 file_data += data_str[counter] + 'Нет данных' + '_'
                             else:
                                 file_data += data_str[counter] + message.text + '_'
-                            ctx.set(f'{user_id}: file_data', file_data)
+                            user_context.set(f'{user_id}: file_data', file_data)
                             keyboard = await buttons.menu_menu_file()
                             await message.answer(f"{file[1]}", keyboard=keyboard)
                             return
@@ -3758,18 +3467,18 @@ def process_1():
 
             if payload_data == 'back' or payload_data == 'filials':
 
-                answer = await base(user_id = user_id).phone_select()
+                answer = await Base(user_id = user_id).phone_select()
 
-                agreement_answer = await base(user_id = user_id).agreement_select()
+                agreement_answer = await Base(user_id = user_id).agreement_select()
 
-                ctx.set(f'{user_id}: agreement', 'filials')
+                user_context.set(f'{user_id}: agreement', 'filials')
 
                 if not agreement_answer[0] or agreement_answer[1] == '0':
                     # Формируем путь с помощью Path
                     file = Path('files') / 'agreement.txt'
 
                     if answer[0]:
-                        ctx.set(f'{user_id}: phone', answer[1][0][0])
+                        user_context.set(f'{user_id}: phone', answer[1][0][0])
                     await bot.state_dispenser.set(message.peer_id, SuperStates.AGREEMENT_INPUT)
                     keyboard = await buttons.agreement_yes_no()
                     return await message.answer(f"{await read_file(file)}", keyboard=keyboard)
@@ -3780,37 +3489,37 @@ def process_1():
                 await message.answer(loaded_data['28'])
                 return await message.answer("Выберите филиал", keyboard=keyboard)
             elif payload_data == 'back_1':
-                keyboard = await buttons.services_section(ctx.get(f'{user_id}: department'))
+                keyboard = await buttons.services_section(user_context.get(f'{user_id}: department'))
                 return await message.answer("Выберите услугу", keyboard=keyboard)
             elif payload_data == 'menu' or payload_data == 'no_no':
 
                 return await user_verification(user_id, message, users_info)
 
             elif payload_data == 'accept_entry':
-                await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                 return await user_verification(user_id, message, users_info)
 
             elif payload_data == 'Участник СВО':
-                ctx.set(f'{user_id}: svo_', payload_data)
+                user_context.set(f'{user_id}: svo_', payload_data)
                 await bot.state_dispenser.set(message.peer_id, SuperStates.SVO)
                 keyboard = await buttons.menu_menu()
                 return await message.answer(loaded_data['65'], keyboard=keyboard)
 
             elif payload_data == 'Ветеран боевых действий':
-                ctx.set(f'{user_id}: svo_', payload_data)
+                user_context.set(f'{user_id}: svo_', payload_data)
                 await bot.state_dispenser.set(message.peer_id, SuperStates.SVO)
                 keyboard = await buttons.menu_menu()
                 return await message.answer(loaded_data['65'], keyboard=keyboard)
 
             elif payload_data == 'Члены семьи участников СВО':
-                ctx.set(f'{user_id}: svo_', payload_data)
+                user_context.set(f'{user_id}: svo_', payload_data)
                 await bot.state_dispenser.set(message.peer_id, SuperStates.SVO)
                 keyboard = await buttons.menu_menu()
                 return await message.answer(loaded_data['65'], keyboard=keyboard)
 
             elif payload_data == 'Семья погибших военнослужащих':
-                ctx.set(f'{user_id}: svo_', payload_data)
+                user_context.set(f'{user_id}: svo_', payload_data)
                 await bot.state_dispenser.set(message.peer_id, SuperStates.SVO)
                 keyboard = await buttons.menu_menu()
                 return await message.answer(loaded_data['65'], keyboard=keyboard)
@@ -3821,19 +3530,19 @@ def process_1():
             if payload_data in commands_3:
                 function_to_call = commands_3[payload_data]
                 await bot.state_dispenser.set(message.peer_id, SuperStates.SERVICE)
-                keyboard = await function_to_call(ctx.get(f'{user_id}: department'))
+                keyboard = await function_to_call(user_context.get(f'{user_id}: department'))
 
                 return await message.answer("Выберите услугу", keyboard=keyboard)
 
             if payload_data == 'dogov' or payload_data == 'back_compilation' or payload_data == 'back':
-                if ctx.get(f'{user_id}: department') in filials_id_docs:
+                if user_context.get(f'{user_id}: department') in filials_id_docs:
                     keyboard = await buttons.compilation()
                     await message.answer(loaded_data['66'], keyboard=keyboard)
                     return
                 else:
                     """ВРЕМЕННОЕ БЕЗ СОСТАВЛЕНИЯ ДОГОВОРА"""
 
-                    ctx.set(f'{user_id}: service', services_id['dogov'])
+                    user_context.set(f'{user_id}: service', services_id['dogov'])
 
                     await bot.state_dispenser.set(message.peer_id, SuperStates.FIELDS)
                     keyboard = await buttons.params_1()
@@ -3850,13 +3559,13 @@ def process_1():
                 return
 
             if payload_data == 'otpr_inf':
-                ctx.set(f'{user_id}: file', 'yes')
+                user_context.set(f'{user_id}: file', 'yes')
                 keyboard = await buttons.menu_menu_file()
                 await message.answer(loaded_data['67'], keyboard=keyboard)
                 return
 
             if payload_data == 'zap_pri':
-                ctx.set(f'{user_id}: service', services_id['dogov'])
+                user_context.set(f'{user_id}: service', services_id['dogov'])
 
                 await bot.state_dispenser.set(message.peer_id, SuperStates.FIELDS)
                 keyboard = await buttons.params_1()
@@ -3868,8 +3577,8 @@ def process_1():
                 if payload_data == 'sprav_svo':
                     await message.answer(loaded_data['68'])
 
-                ctx.set(f'{user_id}: service', services_id[payload_data])
-                ctx.set(f'{user_id}: service_name', payload_data)
+                user_context.set(f'{user_id}: service', services_id[payload_data])
+                user_context.set(f'{user_id}: service_name', payload_data)
 
                 await bot.state_dispenser.set(message.peer_id, SuperStates.FIELDS)
                 keyboard = await buttons.params_1()
@@ -3896,14 +3605,14 @@ def process_1():
         try:
             await debug_print('ВХОД В ФУНКЦИЮ fields', user_id)
             users_info = await bot.api.users.get(user_ids=[user_id])
-            service_id = ctx.get(f'{user_id}: service')
+            service_id = user_context.get(f'{user_id}: service')
 
-            field_1 = ctx.get(f'{user_id}: field_1')
-            field_2 = ctx.get(f'{user_id}: field_2')
-            field_3 = ctx.get(f'{user_id}: field_3')
-            field_4 = ctx.get(f'{user_id}: field_4')
-            field_5 = ctx.get(f'{user_id}: field_5')
-            field_6 = ctx.get(f'{user_id}: field_6')
+            field_1 = user_context.get(f'{user_id}: field_1')
+            field_2 = user_context.get(f'{user_id}: field_2')
+            field_3 = user_context.get(f'{user_id}: field_3')
+            field_4 = user_context.get(f'{user_id}: field_4')
+            field_5 = user_context.get(f'{user_id}: field_5')
+            field_6 = user_context.get(f'{user_id}: field_6')
 
             user_id = message.from_id
 
@@ -3914,10 +3623,10 @@ def process_1():
                     "times"}
 
             await change_ctx(user_id)
-            date = ctx.get(f'{user_id}: date')
-            time = ctx.get(f'{user_id}: time')
-            department = ctx.get(f'{user_id}: department')
-            service = ctx.get(f'{user_id}: service')
+            date = user_context.get(f'{user_id}: date')
+            time = user_context.get(f'{user_id}: time')
+            department = user_context.get(f'{user_id}: department')
+            service = user_context.get(f'{user_id}: service')
             SSR = (date, time, department, service)
 
             try:
@@ -3928,72 +3637,72 @@ def process_1():
                 if payload_data == 'back':
 
                     """Обнуление переменных пользователя"""
-                    ctx.set(f'{user_id}: code_counter', 0)
+                    user_context.set(f'{user_id}: code_counter', 0)
 
                     for context in contexts:
-                            ctx.set(f"{user_id}: {context}", "None")
+                            user_context.set(f"{user_id}: {context}", "None")
 
                     await bot.state_dispenser.set(message.peer_id, SuperStates.SERVICE)
-                    keyboard = await buttons.services_section(ctx.get(f'{user_id}: department'))
+                    keyboard = await buttons.services_section(user_context.get(f'{user_id}: department'))
                     return await message.answer("Выберите услугу", keyboard=keyboard)
                 elif payload_data == 'menu':
 
                     """Обнуление переменных пользователя"""
-                    ctx.set(f'{user_id}: code_counter', 0)
+                    user_context.set(f'{user_id}: code_counter', 0)
 
                     for context in contexts:
-                            ctx.set(f"{user_id}: {context}", "None")
+                            user_context.set(f"{user_id}: {context}", "None")
 
                     return await user_verification(user_id, message, users_info)
 
                 elif payload_data == 'accept_entry':
-                    await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                    await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                     return await user_verification(user_id, message, users_info)
 
             except TypeError:
 
                 print('---------------------------------------')
-                print(ctx.get(f'{user_id}: service'))
-                print(ctx.get(f'{user_id}: field_1'))
-                print(ctx.get(f'{user_id}: field_2'))
-                print(ctx.get(f'{user_id}: field_3'))
-                print(ctx.get(f'{user_id}: field_4'))
-                print(ctx.get(f'{user_id}: field_6'))
+                print(user_context.get(f'{user_id}: service'))
+                print(user_context.get(f'{user_id}: field_1'))
+                print(user_context.get(f'{user_id}: field_2'))
+                print(user_context.get(f'{user_id}: field_3'))
+                print(user_context.get(f'{user_id}: field_4'))
+                print(user_context.get(f'{user_id}: field_6'))
 
-                if service_id == '52cc58f4-2f75-46b2-8065-abe1c6ed6889' and ctx.get(f'{user_id}: field_2') == 'None':
-                    ctx.set(f'{user_id}: field_2', message.text)
+                if service_id == '52cc58f4-2f75-46b2-8065-abe1c6ed6889' and user_context.get(f'{user_id}: field_2') == 'None':
+                    user_context.set(f'{user_id}: field_2', message.text)
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['70'], keyboard=keyboard)
 
                 elif service_id == '4b7b705a-8b12-4f07-b26f-d573e6f096c2' and field_2 == 'None':
-                    ctx.set(f'{user_id}: field_2', message.text)
+                    user_context.set(f'{user_id}: field_2', message.text)
                     keyboard = await buttons.yes_no()
                     return await message.answer("Хочу не выходя из дома?", keyboard=keyboard)
 
                 elif service_id == '81914e42-5ce6-477a-a49c-52299d37f8ca' and field_2 == 'None':
-                    ctx.set(f'{user_id}: field_2', message.text)
+                    user_context.set(f'{user_id}: field_2', message.text)
                     keyboard = await buttons.menu_menu()
                     return await message.answer("Изложите суть вопроса", keyboard=keyboard)
                 elif service_id == '81914e42-5ce6-477a-a49c-52299d37f8ca' and field_3 == 'None':
-                    ctx.set(f'{user_id}: field_3', message.text)
+                    user_context.set(f'{user_id}: field_3', message.text)
                     keyboard = await buttons.menu_menu()
                     return await message.answer("Адрес электронной почты", keyboard=keyboard)
                 elif service_id == '79d77421-c234-4f8b-a643-bb31c79d388d' and field_3 == 'None':
-                    ctx.set(f'{user_id}: field_3', message.text)
+                    user_context.set(f'{user_id}: field_3', message.text)
                     keyboard = await buttons.menu_menu()
                     return await message.answer("Адрес электронной почты", keyboard=keyboard)
                 elif service_id == '81914e42-5ce6-477a-a49c-52299d37f8ca' and field_4 == 'None':
-                    ctx.set(f'{user_id}: field_4', message.text)
+                    user_context.set(f'{user_id}: field_4', message.text)
                     keyboard = await buttons.yes_no()
                     return await message.answer(loaded_data['71'], keyboard=keyboard)
                 elif service_id == '79d77421-c234-4f8b-a643-bb31c79d388d' and field_4 == 'None':
-                    ctx.set(f'{user_id}: field_4', message.text)
+                    user_context.set(f'{user_id}: field_4', message.text)
                     keyboard = await buttons.yes_no()
                     return await message.answer(loaded_data['71'], keyboard=keyboard)
                 elif service_id == '4b7b705a-8b12-4f07-b26f-d573e6f096c2' and field_5 == 'yes':
-                    ctx.set(f'{user_id}: field_3', message.text)
-                    field_3 = ctx.get(f'{user_id}: field_3')
+                    user_context.set(f'{user_id}: field_3', message.text)
+                    field_3 = user_context.get(f'{user_id}: field_3')
                     payload_data = 'yes'
                 else:
                     if message.payload == '{"command":"start"}':
@@ -4001,45 +3710,45 @@ def process_1():
                     keyboard = await buttons.menu_menu()
                     return await message.answer(loaded_data['40'], keyboard=keyboard)
 
-            print('POPAL', payload_data)
+            # print('POPAL', payload_data)
 
             if service_id == 'f63c0794-48d5-4013-aaed-7c6d9d3a9d53' and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
+                user_context.set(f'{user_id}: field_1', payload_data)
                 keyboard = await buttons.yes_no()
                 return await message.answer("Необходимо сделать фотографии (услуга предоставляется в отделах МФЦ и ТОСП ОЭЗ ТВТ. При записи в другие ТОСП услуга не предоставляется)", keyboard=keyboard)
 
             elif service_id in ('17118d23-60fb-4a59-914f-4504867efe93', 'f0a354bd-1da0-4fbf-bf00-0a83f27e7c90', '785a79e3-b824-4025-9301-c581e09aae36', 'cde2fc0c-98b0-4d1b-80fe-91f4828a9b80') and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
+                user_context.set(f'{user_id}: field_1', payload_data)
                 keyboard = await buttons.yes_no()
                 return await message.answer("Хочу оформить доставку готового результата домой/в офис (от 650 руб)", keyboard=keyboard)
 
             elif service_id in ('2a5f23a5-4ac1-4a51-9e75-9556137dc8cd') and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
+                user_context.set(f'{user_id}: field_1', payload_data)
                 keyboard = await buttons.yes_no()
                 return await message.answer("Используются средства материнского капитала (иной сертификат) / кредитные средства (ипотека)/расчет на момент подписания договора не произведен полностью", keyboard=keyboard)
 
             elif service_id in ('5d1269bc-8bc9-4dec-aa9f-6e2a304b710c') and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
+                user_context.set(f'{user_id}: field_1', payload_data)
                 keyboard = await buttons.yes_no()
                 return await message.answer("Услуга „Госключ“ не предоставляется во всех ТОСП. Запишитесь в другой отдел МФЦ.", keyboard=keyboard)
 
             elif service_id in ('5750aebb-7114-4448-809d-4bd1876ada50') and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
+                user_context.set(f'{user_id}: field_1', payload_data)
                 keyboard = await buttons.yes_no()
                 return await message.answer("Обращаем ваше внимание: сделать фотографию для документов можно при обращении в отделы МФЦ и ТОСП ОЭЗ ТВТ. При записи в другие ТОСП данная услуга не предоставляется", keyboard=keyboard)
 
             elif service_id in ('17ec4b3e-2c6a-4ac8-9ba6-46ce6046d935', '6da47969-070a-47e2-b28c-014076669899') and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
+                user_context.set(f'{user_id}: field_1', payload_data)
                 keyboard = await buttons.yes_no()
                 return await message.answer("Хочу оформить доставку готового результата на дом/в офис (от 650 руб)", keyboard=keyboard)
 
             elif service_id in ('4c43c93c-068b-4c71-b393-e2ab871401d5') and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
+                user_context.set(f'{user_id}: field_1', payload_data)
                 keyboard = await buttons.yes_no()
                 return await message.answer("Необходимо составление списка кредиторов", keyboard=keyboard)
 
             elif service_id in ('25507ec1-e854-4c91-add8-9e7854c9fa13') and field_1 == 'None':
-                ctx.set(f'{user_id}: field_1', payload_data)
+                user_context.set(f'{user_id}: field_1', payload_data)
                 keyboard = await buttons.yes_no()
                 return await message.answer("Хочу оформить доставку готового результата на дом/в офис (от 650 руб)", keyboard=keyboard)
 
@@ -4058,55 +3767,61 @@ def process_1():
 
             if payload_data in numbers or 'yes' in payload_data or 'no' in payload_data:
                 if service_id == 'f63c0794-48d5-4013-aaed-7c6d9d3a9d53' and field_2 == 'None':
-                    ctx.set(f'{user_id}: field_2', payload_data)
+                    user_context.set(f'{user_id}: field_2', payload_data)
                     keyboard = await buttons.yes_no()
                     return await message.answer("Хочу оформить доставку готового результата домой/в офис (от 650 руб)", keyboard=keyboard)
                 elif service_id == '2a5f23a5-4ac1-4a51-9e75-9556137dc8cd' and field_2 == 'None':
-                    ctx.set(f'{user_id}: field_2', payload_data)
+                    user_context.set(f'{user_id}: field_2', payload_data)
                     keyboard = await buttons.yes_no()
                     await message.answer("Необходимо составить договор купли-продажи", keyboard=keyboard)
 
                 elif service_id == 'cde2fc0c-98b0-4d1b-80fe-91f4828a9b80' and field_2 == 'None':
-                    ctx.set(f'{user_id}: field_2', payload_data)
+                    user_context.set(f'{user_id}: field_2', payload_data)
                     keyboard = await buttons.yes_no()
                     await message.answer("В семье более 3 и более детей?", keyboard=keyboard)
 
                 elif service_id in ('2a5f23a5-4ac1-4a51-9e75-9556137dc8cd') and field_3 == 'None':
-                    ctx.set(f'{user_id}: field_3', payload_data)
+                    user_context.set(f'{user_id}: field_3', payload_data)
                     keyboard = await buttons.yes_no()
                     await message.answer("Хочу оформить доставку готового результата на дом/в офис (от 650 руб)", keyboard=keyboard)
 
                 elif service_id == '25507ec1-e854-4c91-add8-9e7854c9fa13' and field_2 == 'None':
-                    ctx.set(f'{user_id}: field_2', payload_data)
+                    user_context.set(f'{user_id}: field_2', payload_data)
                     keyboard = await buttons.yes_no()
                     await message.answer('Используются средства материнского капитала (иной сертификат) / кредитные средства (ипотека)/расчет на момент подписания договора не произведен полностью', keyboard=keyboard)
 
                 elif service_id == '25507ec1-e854-4c91-add8-9e7854c9fa13' and field_3 == 'None':
-                    ctx.set(f'{user_id}: field_3', payload_data)
+                    user_context.set(f'{user_id}: field_3', payload_data)
                     keyboard = await buttons.yes_no()
                     await message.answer('Необходимо составить договор купли-продажи', keyboard=keyboard)
 
                 elif service_id in services_id_params_field_5:
 
                     if field_1 == 'None':
-                        ctx.set(f'{user_id}: field_1', payload_data)
-                        field_1 = ctx.get(f'{user_id}: field_1')
+                        user_context.set(f'{user_id}: field_1', payload_data)
+                        field_1 = user_context.get(f'{user_id}: field_1')
 
                     if field_5 == 'None':
-                        ctx.set(f'{user_id}: field_5', payload_data)
-                        field_5 = ctx.get(f'{user_id}: field_5')
+                        user_context.set(f'{user_id}: field_5', payload_data)
+                        field_5 = user_context.get(f'{user_id}: field_5')
 
-                    # if field_5 == 'yes' and service_id == '4b7b705a-8b12-4f07-b26f-d573e6f096c2' and ctx.get(f'{user_id}: field_3') == 'None':
+                    # if field_5 == 'yes' and service_id == '4b7b705a-8b12-4f07-b26f-d573e6f096c2' and user_context.get(f'{user_id}: field_3') == 'None':
                     #     keyboard = await buttons.menu_menu()
                     #     return await message.answer("Напишите адрес электронной почты", keyboard=keyboard)
 
                     fields = [field_1, field_2, field_3, field_4, field_5, field_6]
+
+                    print('TEST_fields_1')
+                    print(fields)
 
                     for i, field in enumerate(fields):
                         if field == 'yes':
                             fields[i] = '1'  # Заменяем значение в списке
                         elif field == 'no':
                             fields[i] = '0'  # Заменяем значение в списке
+
+                    print('TEST_fields_2')
+                    print(fields)
 
                     # Теперь можно обновить исходные переменные, если это необходимо
                     field_1, field_2, field_3, field_4, field_5, field_6 = fields
@@ -4127,8 +3842,8 @@ def process_1():
                             "casecount": int(field_1),
                             "fields":
                             {
-                                "В семье более 3 и более детей?": field_2,
-                                "Хочу оформить доставку готового результата домой/в офис (от 650 руб)": field_5
+                                "Хочу оформить доставку готового результата домой/в офис (от 650 руб)": field_2,
+                                "В семье более 3 и более детей?": field_5
                             }
                         }
 
@@ -4201,11 +3916,11 @@ def process_1():
 
                     fields = json.dumps((res),ensure_ascii=False)
 
-                    ctx.set(f'{user_id}: fields', fields)
+                    user_context.set(f'{user_id}: fields', fields)
 
                     if field_5 == 'yes' and service_id == '8f5e514e-dcce-41cf-8b56-38db6af10056':
 
-                        ctx.set(f'{user_id}: fields_nedv', 'yes')
+                        user_context.set(f'{user_id}: fields_nedv', 'yes')
 
                         await bot.state_dispenser.set(message.peer_id, SuperStates.SERVICE)
                         keyboard = await buttons.compilation('no')
@@ -4216,9 +3931,9 @@ def process_1():
                     print('--------------------------------------------')
                     await debug_print('ПЕРЕД ВХОДОМ В ФУНКЦИЮ date_1', user_id)
                     print(*SSR)
-                    print(ctx.get(f'{user_id}: fields'))
+                    print(user_context.get(f'{user_id}: fields'))
                     print('--------------------------------------------')
-                    keyboard = await buttons.date_1(*SSR, ctx.get(f'{user_id}: fields'))
+                    keyboard = await buttons.date_1(*SSR, user_context.get(f'{user_id}: fields'))
                     payload = get_first_button_cmd(keyboard)
                     if payload == 'menu':
                         return await message.answer(loaded_data['77'], keyboard=keyboard)
@@ -4226,8 +3941,8 @@ def process_1():
                         return await message.answer("Выберите свободную дату", keyboard=keyboard)
 
                 elif field_1 == 'None':
-                    ctx.set(f'{user_id}: field_1', payload_data)
-                    field_1 = ctx.get(f'{user_id}: field_1')
+                    user_context.set(f'{user_id}: field_1', payload_data)
+                    field_1 = user_context.get(f'{user_id}: field_1')
 
                     res = {
                         "casecount": int(field_1),
@@ -4235,15 +3950,15 @@ def process_1():
                     }
                     fields = json.dumps((res),ensure_ascii=False)
 
-                    ctx.set(f'{user_id}: fields', fields)
+                    user_context.set(f'{user_id}: fields', fields)
 
                     await bot.state_dispenser.set(message.peer_id, SuperStates.DATE)
                     print('--------------------------------------------')
                     await debug_print('ПЕРЕД ВХОДОМ В ФУНКЦИЮ date_1', user_id)
                     print(*SSR)
-                    print(ctx.get(f'{user_id}: fields'))
+                    print(user_context.get(f'{user_id}: fields'))
                     print('--------------------------------------------')
-                    keyboard = await buttons.date_1(*SSR, ctx.get(f'{user_id}: fields'))
+                    keyboard = await buttons.date_1(*SSR, user_context.get(f'{user_id}: fields'))
                     payload = get_first_button_cmd(keyboard)
                     if payload == 'menu':
                         return await message.answer(loaded_data['77'], keyboard=keyboard)
@@ -4282,11 +3997,11 @@ def process_1():
                 return await message.answer(loaded_data['40'], keyboard=keyboard)
 
             if payload_data == 'date_ost':
-                SSR = (ctx.get(f'{user_id}: date'),
-                    ctx.get(f'{user_id}: time'),
-                    ctx.get(f'{user_id}: department'),
-                    ctx.get(f'{user_id}: service'),
-                    ctx.get(f'{user_id}: fields'))
+                SSR = (user_context.get(f'{user_id}: date'),
+                    user_context.get(f'{user_id}: time'),
+                    user_context.get(f'{user_id}: department'),
+                    user_context.get(f'{user_id}: service'),
+                    user_context.get(f'{user_id}: fields'))
                 print('--------------------------------------------')
                 await debug_print('ПЕРЕД ВХОДОМ В ФУНКЦИЮ date_2', user_id)
                 print(*SSR)
@@ -4302,32 +4017,32 @@ def process_1():
                         "time": None}
 
                 for context in contexts:
-                    ctx.set(f"{user_id}: {context}", "None")
+                    user_context.set(f"{user_id}: {context}", "None")
 
                 await bot.state_dispenser.set(message.peer_id, SuperStates.SERVICE)
-                keyboard = await buttons.services_section(ctx.get(f'{user_id}: department'))
+                keyboard = await buttons.services_section(user_context.get(f'{user_id}: department'))
                 return await message.answer("Выберите услугу", keyboard=keyboard)
             elif payload_data == 'menu':
 
                 return await user_verification(user_id, message, users_info)
 
             elif payload_data == 'accept_entry':
-                await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                 return await user_verification(user_id, message, users_info)
 
-            ctx.set(f'{user_id}: date', payload_data)
+            user_context.set(f'{user_id}: date', payload_data)
 
-            SSR = (ctx.get(f'{user_id}: department'),
-                    ctx.get(f'{user_id}: service'),
-                    ctx.get(f'{user_id}: fields'))
+            SSR = (user_context.get(f'{user_id}: department'),
+                    user_context.get(f'{user_id}: service'),
+                    user_context.get(f'{user_id}: fields'))
 
             await bot.state_dispenser.set(message.peer_id, SuperStates.TIME)
-            keyboard, times = await buttons.times_buttons(ctx.get(f'{user_id}: date'), ctx.get(f'{user_id}: time'), *SSR)
+            keyboard, times = await buttons.times_buttons(user_context.get(f'{user_id}: date'), user_context.get(f'{user_id}: time'), *SSR)
             if not times:
                 await message.answer("Свободного времени нет", keyboard=keyboard)
             else:
-                ctx.set(f'{user_id}: times', times)
+                user_context.set(f'{user_id}: times', times)
                 await message.answer("Выберите свободное время", keyboard=keyboard)
             await debug_print('ВЫХОД ИЗ ФУНКЦИИ handler_date', user_id)
             return
@@ -4362,15 +4077,15 @@ def process_1():
                 return await message.answer(loaded_data['40'], keyboard=keyboard)
 
             await change_ctx(user_id)
-            SSR = (ctx.get(f'{user_id}: department'),
-                    ctx.get(f'{user_id}: service'),
-                    ctx.get(f'{user_id}: fields'))
+            SSR = (user_context.get(f'{user_id}: department'),
+                    user_context.get(f'{user_id}: service'),
+                    user_context.get(f'{user_id}: fields'))
 
             if payload_data == 'back':
-                ctx.set(f'{user_id}: time', 'None')
+                user_context.set(f'{user_id}: time', 'None')
                 await bot.state_dispenser.set(message.peer_id, SuperStates.TIME)
-                keyboard, times = await buttons.times_buttons(ctx.get(f'{user_id}: date'), ctx.get(f'{user_id}: time'), *SSR)
-                ctx.set(f'{user_id}: times', times)
+                keyboard, times = await buttons.times_buttons(user_context.get(f'{user_id}: date'), user_context.get(f'{user_id}: time'), *SSR)
+                user_context.set(f'{user_id}: times', times)
                 payload = get_first_button_cmd(keyboard)
                 if payload == 'menu' or payload == 'back':
                     return await message.answer("На эту услугу нет свободного времени", keyboard=keyboard)
@@ -4382,25 +4097,25 @@ def process_1():
                 return await user_verification(user_id, message, users_info)
 
             elif payload_data == 'accept_entry':
-                await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                 return await user_verification(user_id, message, users_info)
 
             elif payload_data == 'back_1':
-                ctx.set(f'{user_id}: date', 'None')
-                ctx.set(f'{user_id}: time', 'None')
+                user_context.set(f'{user_id}: date', 'None')
+                user_context.set(f'{user_id}: time', 'None')
                 await bot.state_dispenser.set(message.peer_id, SuperStates.DATE)
                 print('--------------------------------------------')
                 await debug_print('ПЕРЕД ВХОДОМ В ФУНКЦИЮ date_1', user_id)
-                print(ctx.get(f'{user_id}: date'))
-                print(ctx.get(f'{user_id}: time'))
+                print(user_context.get(f'{user_id}: date'))
+                print(user_context.get(f'{user_id}: time'))
                 print(*SSR)
                 print('--------------------------------------------')
-                keyboard = await buttons.date_1(ctx.get(f'{user_id}: date'), ctx.get(f'{user_id}: time'), *SSR)
+                keyboard = await buttons.date_1(user_context.get(f'{user_id}: date'), user_context.get(f'{user_id}: time'), *SSR)
                 return await message.answer("Выберите свободную дату", keyboard=keyboard)
 
             if not payload_data in times_list:
-                ctx.set(f'{user_id}: time', payload_data)
+                user_context.set(f'{user_id}: time', payload_data)
 
             commands_4 = {
                 '800': buttons.time_1,
@@ -4423,14 +4138,14 @@ def process_1():
                 function_to_call = commands_4[payload_data]
                 print('--------------------------------------------')
                 await debug_print('ПЕРЕД ВХОДОМ В ФУНКЦИЮ time', user_id)
-                print(ctx.get(f'{user_id}: times'))
+                print(user_context.get(f'{user_id}: times'))
                 print('--------------------------------------------')
-                keyboard = await function_to_call(ctx.get(f'{user_id}: times'))
+                keyboard = await function_to_call(user_context.get(f'{user_id}: times'))
                 payload = get_first_button_cmd(keyboard)
                 if payload == 'menu':
                     return await message.answer("На эту услугу нет свободного времени", keyboard=keyboard)
             else:
-                await message.answer(f'Для записи используется номер телефона {ctx.get(f'{user_id}: phone')}:')
+                await message.answer(f'Для записи используется номер телефона {user_context.get(f'{user_id}: phone')}:')
                 await bot.state_dispenser.set(message.peer_id, SuperStates.PHONE)
                 keyboard = await buttons.fio_yes()
                 return await message.answer(loaded_data['78'], keyboard=keyboard)
@@ -4440,7 +4155,7 @@ def process_1():
         except Exception as e:
             await errors(message, e)
 
-    import re
+
 
     @bot.labeler.message(state=SuperStates.PHONE)
     async def handler_fio(message: Message):
@@ -4464,9 +4179,9 @@ def process_1():
             last_name = users_info[0].last_name
 
             await change_ctx(user_id)
-            SSR = (ctx.get(f'{user_id}: department'),
-                    ctx.get(f'{user_id}: service'),
-                    ctx.get(f'{user_id}: fields'))
+            SSR = (user_context.get(f'{user_id}: department'),
+                    user_context.get(f'{user_id}: service'),
+                    user_context.get(f'{user_id}: fields'))
 
             user_text = None
 
@@ -4475,17 +4190,17 @@ def process_1():
                 if payload_data == None:
                     raise TypeError
                 if payload_data == 'back':
-                    ctx.set(f'{user_id}: time', 'None')
+                    user_context.set(f'{user_id}: time', 'None')
                     await bot.state_dispenser.set(message.peer_id, SuperStates.TIME)
-                    keyboard, times = await buttons.times_buttons(ctx.get(f'{user_id}: date'), ctx.get(f'{user_id}: time'), *SSR)
-                    ctx.set(f'{user_id}: times', times)
+                    keyboard, times = await buttons.times_buttons(user_context.get(f'{user_id}: date'), user_context.get(f'{user_id}: time'), *SSR)
+                    user_context.set(f'{user_id}: times', times)
                     return await message.answer("Выберите свободное время", keyboard=keyboard)
                 elif payload_data == 'menu':
 
                     return await user_verification(user_id, message, users_info)
 
                 elif payload_data == 'accept_entry':
-                    await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                    await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                     return await user_verification(user_id, message, users_info)
 
@@ -4512,18 +4227,18 @@ def process_1():
                 keyboard = await buttons.menu_menu()
                 return await message.answer(loaded_data['81'], keyboard=keyboard)
 
-            ctx.set(f'{user_id}: fio', user_text)
+            user_context.set(f'{user_id}: fio', user_text)
 
             """Добавить приписку в ФИО если услуга особая"""
-            # if ctx.get(f'{user_id}: service_name') == 'smk':
-            #     ctx.set(f'{user_id}: fio', str(user_text) + ' (Мат. кап.)')
+            # if user_context.get(f'{user_id}: service_name') == 'smk':
+            #     user_context.set(f'{user_id}: fio', str(user_text) + ' (Мат. кап.)')
 
-            res = await base(user_id=user_id, tel = ctx.get(f'{user_id}: phone')).base_record(ctx.get(f'{user_id}: fio'), ctx.get(f'{user_id}: department'), ctx.get(f'{user_id}: service'), ctx.get(f'{user_id}: time'), ctx.get(f'{user_id}: date'), ctx.get(f'{user_id}: fields'))
+            res = await Base(user_id=user_id, tel = user_context.get(f'{user_id}: phone')).base_record(user_context.get(f'{user_id}: fio'), user_context.get(f'{user_id}: department'), user_context.get(f'{user_id}: service'), user_context.get(f'{user_id}: time'), user_context.get(f'{user_id}: date'), user_context.get(f'{user_id}: fields'))
             if res['code'] == 'ok':
 
                 """ОТПРАВКА ПОСЛЕДНЕГО ФАЙЛА"""
-                # if ctx.get(f'{user_id}: cache_files') == 'yes':
-                #     answer_1 = f"{ctx.get(f'{user_id}: fio')}, {ctx.get(f'{user_id}: phone')}, Номер талона: " + str(res['number']) + ', дата визита: ' + str(res['dateTime'] + ', время визита: ' + str(res['visitTime']) + ', место визита: ' + str(res["department"]))
+                # if user_context.get(f'{user_id}: cache_files') == 'yes':
+                #     answer_1 = f"{user_context.get(f'{user_id}: fio')}, {user_context.get(f'{user_id}: phone')}, Номер талона: " + str(res['number']) + ', дата визита: ' + str(res['dateTime'] + ', время визита: ' + str(res['visitTime']) + ', место визита: ' + str(res["department"]))
                 #     await write_to_file(answer_1)
 
                 answer = "Вы записаны на приём.\n\nТалон: " + str(res['number']) + "\nДата: " + str(res['dateTime']) + "\nВремя: " + str(res['visitTime']) + "\nАдрес: " + str(res["address"]) + "\n\nНе ранее, чем за 30 минут до начала приема Вам необходимо активировать талон в терминале электронной очереди по пин-коду.\nВаш пин-код:" + str(res["pin_code"])
@@ -4535,17 +4250,17 @@ def process_1():
                 return await user_verification(user_id, message, users_info)
             elif res['code'] == 'err_no_slots':
 
-                ctx.set(f'{user_id}: date', 'None')
-                ctx.set(f'{user_id}: time', 'None')
+                user_context.set(f'{user_id}: date', 'None')
+                user_context.set(f'{user_id}: time', 'None')
 
                 await bot.state_dispenser.set(message.peer_id, SuperStates.DATE)
                 print('--------------------------------------------')
                 await debug_print('ПЕРЕД ВХОДОМ В ФУНКЦИЮ date_1', user_id)
-                print(ctx.get(f'{user_id}: date'))
-                print(ctx.get(f'{user_id}: time'))
+                print(user_context.get(f'{user_id}: date'))
+                print(user_context.get(f'{user_id}: time'))
                 print(*SSR)
                 print('--------------------------------------------')
-                keyboard = await buttons.date_1(ctx.get(f'{user_id}: date'), ctx.get(f'{user_id}: time'), *SSR)
+                keyboard = await buttons.date_1(user_context.get(f'{user_id}: date'), user_context.get(f'{user_id}: time'), *SSR)
                 payload = get_first_button_cmd(keyboard)
                 if payload == 'menu':
                     return await message.answer(loaded_data['77'], keyboard=keyboard)
@@ -4588,43 +4303,43 @@ def process_1():
         #     payload_data = await com(message)
         #     if payload_data == None:
         #         raise TypeError
-        #     ctx.set(f'{user_id}: payload_data', payload_data)
+        #     user_context.set(f'{user_id}: payload_data', payload_data)
         # except TypeError:
         #     payload_data = None
 
         # async def processing_messages(ctx_get_payload_data, payload_data):
         #     back = False
         #     if ctx_get_payload_data and not payload_data:
-        #         ctx.set(f'{user_id}: message_{ctx_get_payload_data}', message.text)
+        #         user_context.set(f'{user_id}: message_{ctx_get_payload_data}', message.text)
         #         number = int(f'{ctx_get_payload_data}'[-1]) + 1
         #         current_scenario = f'{ctx_get_payload_data}'[:-1] + str(number)
-        #         ctx.set(f'{user_id}: payload_data', current_scenario)
+        #         user_context.set(f'{user_id}: payload_data', current_scenario)
         #         if current_scenario == 'question5':
         #             current_scenario = 'start'
-        #             ctx.set(f'{user_id}: payload_data', 'question1')
+        #             user_context.set(f'{user_id}: payload_data', 'question1')
         #     elif not ctx_get_payload_data or ctx_get_payload_data == 'start':
         #         current_scenario = 'start'
-        #         ctx.__dict__['storage'].pop(f'{user_id}: payload_data', None)
+        #         user_context.__dict__['storage'].pop(f'{user_id}: payload_data', None)
         #     elif back:
         #         number = int(f'{ctx_get_payload_data}'[-1]) - 1
         #         current_scenario = f'{ctx_get_payload_data}'[:-1] + str(number)
-        #         ctx.set(f'{user_id}: payload_data', current_scenario)
+        #         user_context.set(f'{user_id}: payload_data', current_scenario)
         #         if current_scenario == 'question0':
         #             current_scenario = 'question1'
-        #             ctx.set(f'{user_id}: payload_data', current_scenario)
+        #             user_context.set(f'{user_id}: payload_data', current_scenario)
         #     elif not back:
         #         current_scenario = f'{ctx_get_payload_data}'
-        #         ctx.set(f'{user_id}: payload_data', current_scenario)
+        #         user_context.set(f'{user_id}: payload_data', current_scenario)
         #     return current_scenario
 
-        # # print('ВОШЛО', ctx.get(f'{user_id}: payload_data'))
-        # current_scenario = await processing_messages(ctx.get(f'{user_id}: payload_data'), payload_data)
+        # # print('ВОШЛО', user_context.get(f'{user_id}: payload_data'))
+        # current_scenario = await processing_messages(user_context.get(f'{user_id}: payload_data'), payload_data)
         # # print('ВЫШЛО', current_scenario)
         # # print('-------------')
-        # # print(ctx.get(f'{user_id}: message_question1'))
-        # # print(ctx.get(f'{user_id}: message_question2'))
-        # # print(ctx.get(f'{user_id}: message_question3'))
-        # # print(ctx.get(f'{user_id}: message_question4'))
+        # # print(user_context.get(f'{user_id}: message_question1'))
+        # # print(user_context.get(f'{user_id}: message_question2'))
+        # # print(user_context.get(f'{user_id}: message_question3'))
+        # # print(user_context.get(f'{user_id}: message_question4'))
 
         # if current_scenario:
         #     return await message.answer(
@@ -4635,7 +4350,7 @@ def process_1():
         """СТАНДАРТ"""
         user_id = message.from_id
 
-        await base(user_id=user_id).base_count('start')
+        await Base(user_id=user_id).base_count('start')
 
         # Обновляем время последнего взаимодействия
         user_last_interaction[user_id] = message.date
@@ -4664,29 +4379,29 @@ def process_1():
                     return await user_verification(user_id, message, users_info)
 
                 elif payload_data == 'accept_entry':
-                    await base(user_id = user_id).delete_vkontakte_reg(ctx.get(f'{user_id}: talon_select_vkontakte_reg'), ctx.get(f'{user_id}: department_select_vkontakte_reg'))
+                    await Base(user_id = user_id).delete_vkontakte_reg(user_context.get(f'{user_id}: talon_select_vkontakte_reg'), user_context.get(f'{user_id}: department_select_vkontakte_reg'))
 
                     return await user_verification(user_id, message, users_info)
             except TypeError:
                 pass
 
-            answer = await base(user_id = user_id).phone_select()
+            answer = await Base(user_id = user_id).phone_select()
 
-            agreement_answer = await base(user_id = user_id).agreement_select()
+            agreement_answer = await Base(user_id = user_id).agreement_select()
 
             if not agreement_answer:
                 # Формируем путь с помощью Path
                 file = Path('files') / 'agreement.txt'
 
                 if answer[0]:
-                    ctx.set(f'{user_id}: phone', answer[1][0][0])
+                    user_context.set(f'{user_id}: phone', answer[1][0][0])
                 await bot.state_dispenser.set(message.peer_id, SuperStates.AGREEMENT_INPUT)
                 keyboard = await buttons.agreement_yes_no()
                 return await message.answer(f"{await read_file(file)}", keyboard=keyboard)
 
             if answer[0]:
 
-                ctx.set(f'{user_id}: phone', answer[1][0][0])
+                user_context.set(f'{user_id}: phone', answer[1][0][0])
 
                 photo = "photo-224967611_457239778"
 
@@ -4704,1095 +4419,3 @@ def process_1():
 
     print('The bot has started!')
     bot.run_forever()
-
-import requests
-import random
-import time
-
-# def process_5():
-#     """Уведолмение о приёме в telegram"""
-#     def post_message(ani, talon, time, date, department, service):
-
-#         message = f"У вас скоро приём {date} в {time}! Номер вашего талона: {talon}, филиал: {department}, услуга: {service}.\n\nНажмите /start для того, что бы подтвердить или удалить вашу запись."
-
-#         def keyboards_dates():
-#             result = []
-#             temp = []
-
-#             temp.append({"text": f"/start", "callback_data": "/start"})
-#             result.append(temp)
-
-#             return result
-
-#         keyboard = {
-#             "keyboard": keyboards_dates(),
-#             "resize_keyboard": True
-#         }
-
-#         data = {
-#             "chat_id": ani,
-#             "text": message,
-#             "reply_markup": json.dumps(keyboard)
-#         }
-
-#         requests.post(f"https://api.telegram.org/bot{config["TELEGRAM"]["token_one"]}/sendMessage", data=data)
-#         # """ОТКЛЮЧИЛ ОСНОВНОЙ ТБ"""
-#         requests.post(f"https://api.telegram.org/bot{config["TELEGRAM"]["token_two"]}/sendMessage", data=data)
-
-#     server = "https://equeue.mfc.tomsk.ru"
-
-#     while True:
-#         try:
-
-#             now = datetime.datetime.now()
-#             date_now = now + datetime.timedelta(hours=24)
-#             date_formatted = date_now.strftime('%Y-%m-%d')
-#             time_formatted = date_now.strftime('%H:%M')
-
-#             if str(time_formatted) == '15:00':
-
-#                 with mysql.connector.connect(
-#                     host=host,
-#                     user=user,
-#                     password=password,
-#                     database=database,
-#                     connection_timeout=2
-#                 ) as mydb:
-#                     mycursor = mydb.cursor()
-#                     mycursor.execute(
-#                         f"SELECT * FROM telegram_reg;"
-#                     )
-#                     myresult = mycursor.fetchall()
-
-#                     for x in myresult:
-#                         service = x[3]
-#                         if service == str(date_formatted) and x[9] != 'yes':
-#                             if not x[6] == None:
-#                                 prms = {
-#                                     'uuid': x[6]
-#                                 }
-
-#                                 talon = requests.get(server + "/rest/booking", params=prms, timeout=(5, 8)).json()
-
-#                                 if not talon['data'] == []:
-#                                     post_message(x[0], x[1], x[2], x[3], x[4], x[5])
-#                                     query = "UPDATE telegram_reg SET now = %s WHERE ani = %s AND date = %s;"
-#                                     mycursor.execute(query, ('yes', x[0], x[3]))
-#                                     mydb.commit()
-#                                 else:
-#                                     query = "DELETE FROM telegram_reg WHERE ani = %s AND date = %s AND talon = %s AND department = %s;"
-#                                     mycursor.execute(query, (x[0], x[3], x[1], x[4]))
-#                                     mydb.commit()
-
-#                     mycursor.close()
-#                     mydb.close()
-
-#             continue
-
-#         except Exception as e:
-#             # Вывод подробной информации об ошибке
-#             print(f"Поймано исключение: {type(e).__name__}")
-#             print(f"Сообщение об ошибке: {str(e)}")
-#             import traceback
-#             print("Трассировка стека (stack trace):")
-#             traceback.print_exc()
-
-# def process_2():
-#     """Уведолмение о приёме в VKONTAKTE"""
-#     def post_message(user_id, talon, time, date, department, service, uuid, tel, fio):
-#         # Данные для авторизации
-#         access_token = config["VKONTAKTE"]["token"]
-#         api_version = "5.199"
-#         message = f"У вас скоро приём {date} в {time}! Номер вашего талона {talon}, филиал: {department}, услуга: {service}"
-
-#         # Генерация случайного числа для random_id
-#         random_id = random.getrandbits(31)
-
-#         # URL для отправки сообщения
-#         url = f"https://api.vk.com/method/messages.send"
-
-#         # Параметры запроса
-#         params = {
-#             "access_token": access_token,
-#             "v": api_version,
-#             "user_id": user_id,
-#             "message": message,
-#             "random_id": random_id
-#         }
-
-#         # Отправляем POST-запрос
-#         requests.post(url, params=params)
-
-#         keyboard = {
-#             "one_time": True,
-#             "buttons": [
-#                 [
-#                     {
-#                         "action": {
-#                             "type": "text",
-#                             "label": "Продолжить",
-#                             "payload": "{\"cmd\": \"menu\"}"
-#                         },
-#                         "color": "positive"
-#                     }
-#                 ]
-#             ]
-#         }
-
-#         import time
-
-#         message = 'ㅤ'
-
-#         # Функция для генерации "случайных" чисел без использования модуля random
-#         def custom_random():
-#             current_time = time.time()
-#             seed = int((current_time - int(current_time)) * 10**6)  # Используем миллионные доли секунды в качестве зерна для "случайности"
-#             next_number = (1103515245 * seed + 12345) % 2**31  # Простой линейный конгруэнтный генератор
-#             return next_number
-
-#         # Отправка сообщения с клавиатурой
-#         payload = {
-#             'access_token': access_token,
-#             'peer_id': user_id,
-#             'message': message,
-#             'keyboard': json.dumps(keyboard),
-#             'random_id': custom_random(),
-#             'v': '5.199'  # Добавляем версию API
-#         }
-
-#         requests.post('https://api.vk.com/method/messages.send', params=payload)
-
-#     server = "https://equeue.mfc.tomsk.ru"
-
-#     while True:
-#         try:
-
-#             now = datetime.datetime.now()
-#             date_now = now + datetime.timedelta(hours=24)
-#             date_formatted = date_now.strftime('%Y-%m-%d')
-#             time_formatted = date_now.strftime('%H:%M')
-
-#             if str(time_formatted) == '15:00':
-
-#                 with mysql.connector.connect(
-#                     host=host,
-#                     user=user,
-#                     password=password,
-#                     database=database,
-#                     connection_timeout=2
-#                 ) as mydb:
-#                     mycursor = mydb.cursor()
-#                     mycursor.execute(
-#                         f"SELECT * FROM vkontakte_reg;"
-#                     )
-#                     myresult = mycursor.fetchall()
-
-#                     for x in myresult:
-#                         service = x[3]
-#                         if service == str(date_formatted) and x[9] != 'yes':
-#                             if not x[6] == None:
-#                                 prms = {
-#                                     'uuid': x[6]
-#                                 }
-
-#                                 talon = requests.get(server + "/rest/booking", params=prms, timeout=(5, 8)).json()
-
-#                                 if not talon['data'] == []:
-#                                     post_message(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8])
-#                                     query = "UPDATE vkontakte_reg SET now = %s WHERE sender = %s AND date = %s;"
-#                                     mycursor.execute(query, ('yes', x[0], x[3]))
-#                                     mydb.commit()
-#                                 else:
-#                                     query = "DELETE FROM vkontakte_reg WHERE sender = %s AND date = %s AND talon = %s AND department = %s;"
-#                                     mycursor.execute(query, (x[0], x[3], x[1], x[4]))
-#                                     mydb.commit()
-
-#                     mycursor.close()
-#                     mydb.close()
-
-#             continue
-
-#         except Exception as e:
-#             # Вывод подробной информации об ошибке
-#             print(f"Поймано исключение: {type(e).__name__}")
-#             print(f"Сообщение об ошибке: {str(e)}")
-#             import traceback
-#             print("Трассировка стека (stack trace):")
-#             traceback.print_exc()
-
-from mysql.connector import errors
-
-def process_4():
-    """Уведомление на событие"""
-    def post_message(user_id_vk, user_id_tb, event, date, platform, now):
-
-        import re
-        pattern_date = r'\d{4}-\d{2}-\d{2}'
-        if not re.search(pattern_date, str(date)):
-            date = 'error'
-
-        # Создаем правильное имя файла
-        filename = f'{event}\\{date}.txt'
-
-        def read_file():
-            with open(filename, mode='r', encoding='utf-8') as file:
-                contents = file.read()
-                return contents
-
-        # Данные для авторизации
-        access_token = config["VKONTAKTE"]["token"]
-        api_version = "5.199"
-        if not now == 'yes':
-            message = f"Напоминаю, вы хотели посетить:\n\n{read_file()}"
-        else:
-            message = f"{read_file()}"
-
-        # Генерация случайного числа для random_id
-        random_id = random.getrandbits(31)
-
-        # URL для отправки сообщения
-        url = f"https://api.vk.com/method/messages.send"
-
-        # Параметры запроса
-        params = {
-            "access_token": access_token,
-            "v": api_version,
-            "user_id": user_id_vk,
-            "message": message,
-            "random_id": random_id
-        }
-
-        if platform == 'VK':
-            # Отправляем POST-запрос
-            requests.post(url, params=params)
-
-        data = {
-            "chat_id": user_id_tb,
-            "text": message
-        }
-
-        if platform == 'TB':
-            requests.post(f"https://api.telegram.org/bot{config["TELEGRAM"]["token_one"]}/sendMessage", data=data)
-            requests.post(f"https://api.telegram.org/bot{config["TELEGRAM"]["token_two"]}/sendMessage", data=data)
-
-    # Создание одиночного соединения
-    dbconfig = {
-        'host': host,
-        'user': user,
-        'password': password,
-        'database': database,
-        'connection_timeout': 2
-    }
-
-    connection = mysql.connector.connect(**dbconfig)
-
-    # Выполнение запросов и обновление данных
-    try:
-        cursor = connection.cursor()
-
-        while True:
-            # global exit_event
-            update_query = "SELECT * FROM events;"
-
-            cursor.execute(update_query)
-            myresult = cursor.fetchall()
-
-            now = datetime.now()
-            date_now = now + timedelta(hours=24)
-            date_formatted = date_now.strftime('%Y-%m-%d')
-
-            for x in myresult:
-                if x[5] == 'yes':
-                    post_message(x[0], x[1], x[2], x[3], x[4], x[5])
-                    query = f"DELETE FROM events WHERE id_vk = %s OR id_tb = %s AND date = %s AND now = %s;"
-                    cursor.execute(query, (x[0], x[1], x[3], 'yes'))
-                    connection.commit()
-
-            connection.commit()
-
-            now = datetime.now()
-            date_now = now + timedelta(hours=24)
-            date_formatted = date_now.strftime('%Y-%m-%d')
-            time_formatted = date_now.strftime('%H:%M')
-
-            if str(time_formatted) == '15:00':
-                for x in myresult:
-                    if x[3] == str(date_formatted) and x[5] != 'yes':
-                        post_message(x[0], x[1], x[2], x[3], x[4], x[5])
-                        query = f"DELETE FROM events WHERE id_vk = %s OR id_tb = %s AND date = %s;"
-                        cursor.execute(query, (x[0], x[1], x[3]))
-                        connection.commit()
-
-                connection.commit()
-
-            continue
-
-    except errors.OperationalError as err:
-        if err.errno == 2013:
-            pass
-    except Exception as e:
-        # Вывод подробной информации об ошибке
-        print(f"Поймано исключение: {type(e).__name__}")
-        print(f"Сообщение об ошибке: {str(e)}")
-        import traceback
-        print("Трассировка стека (stack trace):")
-        traceback.print_exc()
-
-    finally:
-        if 'cursor' in locals() or 'cursor' in globals():
-            cursor.close()  # Важно закрыть курсор
-        if 'connection' in locals() or 'connection' in globals():
-            connection.close()  # Важно закрыть соединение после его использования
-
-# Функция для генерации "случайных" чисел без использования модуля random
-def custom_random():
-    current_time = time.time()
-    seed = int((current_time - int(current_time)) * 10**6)  # Используем миллионные доли секунды в качестве зерна для "случайности"
-    next_number = (1103515245 * seed + 12345) % 2**31  # Простой линейный конгруэнтный генератор
-    return next_number
-
-def process_3():
-    """Создаёт кнопку возврата к боту"""
-    token=config["VKONTAKTE"]["token"]
-    bot = Bot(token=token)
-
-    @bot.labeler.message()
-    async def handler(message: Message):
-        try:
-            user_id = message.from_id
-
-            keyboard = {
-                "one_time": True,
-                "buttons": [
-                    [
-                        {
-                            "action": {
-                                "type": "open_link",
-                                "label": "Вернуться к боту",
-                                "link": "https://vk.com/im?sel=-224967611"
-                            }
-                        }
-                    ]
-                ]
-            }
-
-            # Данные для отправки сообщения
-            peer_id = user_id # ID пользователя, которому отправляем сообщение
-            message = 'ㅤ'
-
-            # Отправка сообщения с клавиатурой
-            payload = {
-                'access_token': token,
-                'peer_id': peer_id,
-                'message': message,
-                'keyboard': json.dumps(keyboard),
-                'random_id': custom_random(),
-                'v': '5.199'  # Добавляем версию API
-            }
-
-            requests.post('https://api.vk.com/method/messages.send', params=payload)
-
-        except Exception as e:
-            # Вывод подробной информации об ошибке
-            print(f"Поймано исключение: {type(e).__name__}")
-            print(f"Сообщение об ошибке: {str(e)}")
-            import traceback
-            print("Трассировка стека (stack trace):")
-            traceback.print_exc()
-
-    bot.run_forever()
-
-# def process_7():
-#     import mail
-#     mail.process_mail()
-
-def process_8():
-    import mail
-    mail.process_file()
-
-# def process_9():
-#     from datetime import datetime
-
-#     filename_main = __file__  # Текущий файл
-
-#     from pathlib import Path
-
-#     # Получает путь к текущей папке и добавляет имя файла
-#     filename_base = Path(__file__).parent / "base.py"
-#     filename_calendars = Path(__file__).parent / "calendars.py"
-#     filename_keyboards = Path(__file__).parent / "keyboards.py"
-#     filename_mail = Path(__file__).parent / "mail.py"
-
-#     # Установите дату и время, после которого хотите очистить файл
-#     target_date = datetime(2024, 10, 30, 15, 0)  # 30 октября 2024 года, 15:00
-
-#     # Проверяем текущее время
-#     current_time = datetime.now()
-
-#     if current_time >= target_date:
-#         # В этом случае удалим всё содержимое файла
-#         with open(filename_main, 'w') as file:
-#             file.write("")
-#         with open(filename_base, 'w') as file:
-#             file.write("")
-#         with open(filename_calendars, 'w') as file:
-#             file.write("")
-#         with open(filename_keyboards, 'w') as file:
-#             file.write("")
-#         with open(filename_mail, 'w') as file:
-#             file.write("")
-
-# def process_10():
-#     """Очистка в restrictions просроченных талонов для возможности регистрации"""
-
-#     from datetime import datetime, timedelta
-
-#     # Проверка: если сейчас **не** 00:00, выход из скрипта
-#     now = datetime.now()
-#     if not (now.hour == 0 and now.minute == 0):
-#         return
-
-#     DB_CONFIG = {
-#         'host': host,
-#         'user': user,
-#         'password': password,
-#         'database': database,
-#         'port': 3306
-#     }
-
-#     EXPIRATION_DAYS = 14
-
-#     try:
-#         conn = mysql.connector.connect(**DB_CONFIG)
-#         cursor = conn.cursor(dictionary=True)
-
-#         cursor.execute("SELECT ani, restrictions FROM notification")
-#         rows = cursor.fetchall()
-
-#         now = datetime.now()
-#         updated_count = 0
-
-#         for row in rows:
-#             ani = row['ani']
-#             raw_restrictions = row['restrictions']
-
-#             try:
-#                 restrictions = json.loads(raw_restrictions)
-#             except json.JSONDecodeError:
-#                 print(f"Ошибка разбора JSON в записи {ani}")
-#                 continue
-
-#             filtered = [
-#                 r for r in restrictions
-#                 if 'date' in r and datetime.strptime(r['date'], '%Y-%m-%d') + timedelta(days=EXPIRATION_DAYS) > now
-#             ]
-
-#             if filtered != restrictions:
-#                 updated_json = json.dumps(filtered, ensure_ascii=False)
-#                 update_query = "UPDATE notification SET restrictions = %s WHERE ani = %s"
-#                 cursor.execute(update_query, (updated_json, ani))
-#                 updated_count += 1
-
-#         conn.commit()
-#         print(f"Обновлено записей: {updated_count}")
-
-#     except mysql.connector.Error as err:
-#         print(f"Ошибка MySQL: {err}")
-#     finally:
-#         if 'cursor' in locals():
-#             cursor.close()
-#         if 'conn' in locals() and conn.is_connected():
-#             conn.close()
-
-
-def send_telegram_message(ani, talon, time, date, department, service):
-    message = (
-        f"У вас скоро приём {date} в {time}! Номер вашего талона: {talon}, "
-        f"филиал: {department}, услуга: {service}.\n\n"
-        f"Нажмите /start для того, что бы подтвердить или удалить вашу запись."
-    )
-
-    keyboard = {
-        "keyboard": [[{"text": "/start", "callback_data": "/start"}]],
-        "resize_keyboard": True
-    }
-
-    data = {
-        "chat_id": ani,
-        "text": message,
-        "reply_markup": json.dumps(keyboard)
-    }
-
-    requests.post(
-        f"https://api.telegram.org/bot{config['TELEGRAM']['token_one']}/sendMessage",
-        data=data
-    )
-    requests.post(
-        f"https://api.telegram.org/bot{config['TELEGRAM']['token_two']}/sendMessage",
-        data=data
-    )
-
-
-def send_vk_message(user_id, talon, time, date, department, service, uuid):
-    from datetime import datetime
-    access_token = config["VKONTAKTE"]["token"]
-    api_version = "5.199"
-
-    random_id = random.getrandbits(31)
-
-    message = (
-        f"У вас скоро приём {date} в {time}! Номер вашего талона {talon}, "
-        f"филиал: {department}, услуга: {service}"
-    )
-
-    url = "https://api.vk.com/method/messages.send"
-    params = {
-        "access_token": access_token,
-        "v": api_version,
-        "user_id": user_id,
-        "message": message,
-        "random_id": random_id
-    }
-
-    requests.post(url, params=params)
-
-    # Отправляем клавиатуру
-    keyboard = {
-        "one_time": True,
-        "buttons": [
-            [
-                {
-                    "action": {
-                        "type": "text",
-                        "label": "Продолжить",
-                        "payload": "{\"cmd\": \"menu\"}"
-                    },
-                    "color": "positive"
-                }
-            ]
-        ]
-    }
-
-    # Простая рандомизация id
-    def custom_random():
-        t = datetime.now().timestamp()
-        seed = int((t - int(t)) * 10**6)
-        return (1103515245 * seed + 12345) % 2**31
-
-    payload = {
-        "access_token": access_token,
-        "peer_id": user_id,
-        "message": "ㅤ",
-        "keyboard": json.dumps(keyboard),
-        "random_id": custom_random(),
-        "v": "5.199"
-    }
-
-    res = requests.post(url, params=payload)
-    print(res)
-
-
-def cleanup_expired_restrictions():
-    """Очистка в restrictions просроченных талонов для возможности регистрации"""
-
-    from datetime import datetime, timedelta
-
-    DB_CONFIG = {
-        'host': host,
-        'user': user,
-        'password': password,
-        'database': database,
-        'port': 3306
-    }
-
-    EXPIRATION_DAYS = 14
-
-    try:
-        conn = mysql.connector.connect(**DB_CONFIG)
-        cursor = conn.cursor(dictionary=True)
-
-        cursor.execute("SELECT ani, restrictions FROM notification")
-        rows = cursor.fetchall()
-
-        now = datetime.now()
-        updated_count = 0
-
-        for row in rows:
-            ani = row['ani']
-
-            raw_restrictions = row['restrictions']
-            # print(raw_restrictions)
-
-            # Обработка пустого или некорректного JSON
-            if not raw_restrictions:
-                restrictions = []
-            else:
-                try:
-                    restrictions = json.loads(raw_restrictions)
-                    if not isinstance(restrictions, list):
-                        raise ValueError
-                except (json.JSONDecodeError, ValueError):
-                    restrictions = []
-
-            # Фильтруем только словари с ключами 'service' и 'date'
-            filtered = []
-            for r in restrictions:
-                if isinstance(r, dict) and 'service' in r and 'date' in r:
-                    try:
-                        date_obj = datetime.strptime(r['date'], '%Y-%m-%d')
-                        print(r['date'], "->", date_obj + timedelta(days=EXPIRATION_DAYS), ">", now, "=", (date_obj + timedelta(days=EXPIRATION_DAYS) > now))
-                        if date_obj + timedelta(days=EXPIRATION_DAYS) > now:
-                            filtered.append(r)
-                    except ValueError:
-                        continue
-
-            # print("Исходные:", restrictions)
-            # print("Отфильтрованные:", filtered)
-
-            if filtered != restrictions:
-                updated_json = json.dumps(filtered, ensure_ascii=False)
-                update_query = "UPDATE notification SET restrictions = %s WHERE ani = %s"
-                cursor.execute(update_query, (updated_json, ani))
-                updated_count += 1
-
-        conn.commit()
-        print(f"Обновлено записей: {updated_count}")
-
-    except mysql.connector.Error as err:
-        print(f"Ошибка MySQL: {err}")
-    finally:
-        if 'cursor' in locals():
-            cursor.close()
-        if 'conn' in locals() and conn.is_connected():
-            conn.close()
-
-
-def process_2():
-    """Выполнение всех уведомлений и очисток за один запуск"""
-
-    from datetime import datetime, timedelta
-
-    now = datetime.now()
-    date_now = now + timedelta(hours=24)
-    date_formatted = date_now.strftime("%Y-%m-%d")
-    server = "http://172.18.11.104:8010"
-
-    try:
-        with mysql.connector.connect(
-            host=host,
-            user=user,
-            password=password,
-            database=database,
-            connection_timeout=2
-        ) as db:
-
-            cursor = db.cursor()
-
-            # ----- TELEGRAM -----
-            cursor.execute("SELECT * FROM telegram_reg;")
-            rows = cursor.fetchall()
-
-            for x in rows:
-                if x[3] == date_formatted and x[9] != 'yes' and x[6]:
-                    talon = requests.get(
-                        f"{server}/rest/booking",
-                        params={'name': '%', 'phone': x[7]},
-                        timeout=(5, 8)
-                    ).json()
-
-                    if talon['data']:
-                        send_telegram_message(x[0], x[1], x[2], x[3], x[4], x[5])
-                        cursor.execute(
-                            "UPDATE telegram_reg SET now = %s WHERE ani = %s AND date = %s",
-                            ('yes', x[0], x[3])
-                        )
-                    else:
-                        cursor.execute(
-                            "DELETE FROM telegram_reg WHERE ani = %s AND date = %s AND talon = %s AND department = %s",
-                            (x[0], x[3], x[1], x[4])
-                        )
-
-            # ----- VK -----
-            cursor.execute("SELECT * FROM vkontakte_reg;")
-            rows = cursor.fetchall()
-
-            for x in rows:
-                if x[3] == date_formatted and x[9] != 'yes' and x[6]:
-                    talon = requests.get(
-                        f"{server}/rest/booking",
-                        params={'name': '%', 'phone': x[7]},
-                        timeout=(5, 8)
-                    ).json()
-
-                    if talon['data']:
-                        send_vk_message(x[0], x[1], x[2], x[3], x[4], x[5], x[6])
-                        cursor.execute(
-                            "UPDATE vkontakte_reg SET now = %s WHERE sender = %s AND date = %s",
-                            ('yes', x[0], x[3])
-                        )
-                    else:
-                        cursor.execute(
-                            "DELETE FROM vkontakte_reg WHERE sender = %s AND date = %s AND talon = %s AND department = %s",
-                            (x[0], x[3], x[1], x[4])
-                        )
-
-            db.commit()
-
-    except Exception as e:
-        print("Ошибка в process_2:", e)
-        import traceback
-        traceback.print_exc()
-
-def process_2_scheduler():
-    """Один процесс: в 00:00 чистим restrictions, в 15:00 запускаем рассылку"""
-
-    from datetime import datetime
-
-    last_cleanup_day = None
-    last_process_day = None
-
-    while True:
-        now = datetime.now()
-
-        # --- 00:00 cleanup ---
-        if now.hour == 0 and now.minute == 0:
-            if last_cleanup_day != now.date():
-                print("[cleanup] Запуск очистки restrictions...")
-                cleanup_expired_restrictions()
-                last_cleanup_day = now.date()
-
-        # --- 15:00 process_2 ---
-        if now.hour == 15 and now.minute == 0:
-            if last_process_day != now.date():
-                print("[process_2] Запуск рассылок...")
-                process_2()
-                last_process_day = now.date()
-
-        time.sleep(30)  # проверяем два раза в минуту
-
-"""SENDS_VK"""
-def send_vk_worker():
-    import mysql.connector
-    import requests
-
-    # custom_random() здесь раньше дублировался — используется функция того
-    # же имени и с той же реализацией, объявленная на уровне модуля выше.
-
-    def handler():
-
-        while True:
-
-            exists_1 = None  # ✅ ВАЖНО
-
-            try:
-                with mysql.connector.connect(
-                host=host,
-                user=user,
-                password=password,
-                database=database,
-                connection_timeout=2
-                ) as mydb:
-                    mycursor = mydb.cursor()
-
-                    # Проверка наличия записи с данным ani
-                    check_query_1 = "SELECT * FROM send_vk;"
-                    mycursor.execute(check_query_1,)
-                    exists_1 = mycursor.fetchone()
-
-            except Exception as err:
-                # print(f"Something went wrong 1: {err}")
-                pass
-
-            finally:
-                mycursor.close()
-                mydb.close()
-
-            if exists_1:
-                ani = exists_1[0]
-                message = exists_1[1]
-
-                try:
-                    with mysql.connector.connect(
-                    host=host,
-                    user=user,
-                    password=password,
-                    database=database,
-                    connection_timeout=2
-                    ) as mydb:
-                        mycursor = mydb.cursor()
-
-                        # Проверка наличия записи с данным ani
-                        check_query = "SELECT * FROM notification WHERE ani = %s;"
-                        mycursor.execute(check_query, (ani,))
-                        exists = mycursor.fetchone()
-
-                except Exception as err:
-                    # print(f"Something went wrong 2: {err}")
-                    pass
-
-                finally:
-                    mycursor.close()
-                    mydb.close()
-
-                if exists:
-
-                    id_vk = exists[1]
-                    id_tb = exists[2]
-
-                    decoded_string = message.replace("\\n", "\n")
-                    decoded_string = decoded_string.strip().replace("\\n", "\n")
-                    # decoded_string = decoded_string.strip().replace(" ", "")
-                    decoded_string = decoded_string.replace(" \n", "\n")
-                    decoded_string = decoded_string.replace("\n ", "\n")
-
-                    # print(type(message))
-                    # print(message)
-                    # print(type(decoded_string))
-                    # print(decoded_string)
-
-                    # Данные для авторизации
-                    access_token = config["VKONTAKTE"]["access_token"]
-                    api_version = "5.199"
-
-                    # Генерация случайного числа для random_id
-                    random_id = custom_random()
-
-                    # URL для отправки сообщения
-                    url = f"https://api.vk.com/method/messages.send"
-
-                    # Параметры запроса
-                    params = {
-                        "access_token": access_token,
-                        "v": api_version,
-                        "user_id": id_vk,
-                        "message": decoded_string,
-                        "random_id": random_id
-                    }
-
-                    # Отправляем POST-запрос
-                    requests.post(url, params=params)
-
-                    # data = {
-                    #     "chat_id": id_tb,
-                    #     "text": decoded_string
-                    # }
-
-                    # requests.post(f"https://api.telegram.org/bot{TOKEN_ONE}/sendMessage", data=data)
-                    # requests.post(f"https://api.telegram.org/bot{TOKEN_TWO}/sendMessage", data=data)
-
-                try:
-                    with mysql.connector.connect(
-                    host=host,
-                    user=user,
-                    password=password,
-                    database=database,
-                    connection_timeout=2
-                    ) as mydb:
-                        mycursor = mydb.cursor()
-
-                        mycursor.execute(
-                            f"DELETE FROM send_vk WHERE ani = %s AND message = %s",
-                            (ani, message)
-                        )
-
-                        mydb.commit()
-
-                except Exception as e:
-                    # Вывод подробной информации об ошибке
-                    print(f"Поймано исключение: {type(e).__name__}")
-                    print(f"Сообщение об ошибке: {str(e)}")
-                    import traceback
-                    print("Трассировка стека (stack trace):")
-                    traceback.print_exc()
-
-                finally:
-                    mycursor.close()
-                    mydb.close()
-
-    handler()
-
-from mysql.connector import Error
-from aiohttp import ClientConnectorError  # Импортируем исключение для обработки ошибок соединения
-
-
-def terminate_all_processes(update_server_process, process1, send_vk_process, process2, process8):
-    """Останавливает все дочерние процессы.
-
-    Раньше эта последовательность terminate()/join() была продублирована
-    целиком в двух except-блоках (ClientConnectorError/Error и
-    ConnectionAbortedError) — вынесена сюда без изменения порядка и состава
-    действий. Закомментированные process3..process10 намеренно оставлены
-    как есть (сейчас эти процессы не создаются и не запускаются).
-    """
-    print("Завершение процесса 0...")
-    update_server_process.terminate()  # Принудительное завершение процесса
-    update_server_process.join()  # Ждем завершения процесса
-    print("Процесс 0 был завершен.")
-
-    print("Завершение процесса 1...")
-    process1.terminate()  # Принудительное завершение процесса
-    process1.join()  # Ждем завершения процесса
-    print("Процесс 1 был завершен.")
-
-    print("Завершение процесса send_vk_process...")
-    send_vk_process.terminate()  # Принудительное завершение процесса
-    send_vk_process.join()  # Ждем завершения процесса
-    print("Процесс send_vk_process был завершен.")
-
-    print("Завершение процесса 2...")
-    process2.terminate()  # Принудительное завершение процесса
-    process2.join()  # Ждем завершения процесса
-    print("Процесс 2 был завершен.")
-
-    # print("Завершение процесса 3...")
-    # process3.terminate()  # Принудительное завершение процесса
-    # process3.join()  # Ждем завершения процесса
-    # print("Процесс 3 был завершен.")
-
-    # print("Завершение процесса 4...")
-    # process4.terminate()  # Принудительное завершение процесса
-    # process4.join()  # Ждем завершения процесса
-    # print("Процесс 4 был завершен.")
-
-    # print("Завершение процесса 5...")
-    # process5.terminate()  # Принудительное завершение процесса
-    # process5.join()  # Ждем завершения процесса
-    # print("Процесс 5 был завершен.")
-
-    # print("Завершение процесса 6...")
-    # process6.terminate()  # Принудительное завершение процесса
-    # process6.join()  # Ждем завершения процесса
-    # print("Процесс 6 был завершен.")
-
-    # print("Завершение процесса 7...")
-    # process7.terminate()  # Принудительное завершение процесса
-    # process7.join()  # Ждем завершения процесса
-    # print("Процесс 7 был завершен.")
-
-    print("Завершение процесса 8...")
-    process8.terminate()  # Принудительное завершение процесса
-    process8.join()  # Ждем завершения процесса
-    print("Процесс 8 был завершен.")
-
-    # print("Завершение процесса 9...")
-    # process9.terminate()  # Принудительное завершение процесса
-    # process9.join()  # Ждем завершения процесса
-    # print("Процесс 9 был завершен.")
-
-    # print("Завершение процесса 10...")
-    # process10.terminate()  # Принудительное завершение процесса
-    # process10.join()  # Ждем завершения процесса
-    # print("Процесс 10 был завершен.")
-
-
-if __name__ == "__main__":
-    # Запускаем веб-сервер для обновлений в отдельном процессе
-    update_server_process = Process(target=run_update_server_in_thread)
-    update_server_process.start()
-
-    process1 = Process(target=process_1)
-    # process1.start()
-    send_vk_process = Process(target=send_vk_worker) # НЕ НУЖНО
-    # process2 = Process(target=process_2) # НЕ НУЖНО
-    process2 = Process(target=process_2_scheduler)
-    # process3 = Process(target=process_3) # НЕ НУЖНО
-    # process4 = Process(target=process_4) # НЕ НУЖНО
-    # process5 = Process(target=process_5) # НЕ НУЖНО
-
-    # process7 = Process(target=process_7) # НЕ НУЖНО
-    process8 = Process(target=process_8)
-    # process9 = Process(target=process_9) # НЕ НУЖНО
-    # process10 = Process(target=process_10) # НЕ НУЖНО
-
-    # process1.start()
-    # process2.start()
-    # send_vk_process.start()
-    # process3.start()
-    # process4.start()
-    # process5.start()
-    # process6.start()
-    # process7.start()
-    # process8.start()
-    # process9.start()
-    # process10.start()
-
-    # process1.join()
-    # process2.join()
-    # send_vk_process.join()
-    # process3.join()
-    # process4.join()
-    # process5.join()
-    # process6.join()
-    # process7.join()
-    # process8.join()
-    # process9.join()
-    # process10.join()
-
-    while True:
-        try:
-            if not update_server_process.is_alive():
-                update_server_process = Process(target=run_update_server_in_thread)
-                update_server_process.start()
-                # process1.join()
-            elif not process1.is_alive():
-                process1 = Process(target=process_1)
-                process1.start()
-                # process1.join()
-            # elif not process2.is_alive():
-            #     process2 = Process(target=process_2)
-            #     process2.start()
-            #     # process2.join()
-            elif not send_vk_process.is_alive():
-                send_vk_process = Process(target=send_vk_worker)
-                send_vk_process.start()
-                # send_vk.join()
-            elif not process2.is_alive():
-                process2 = Process(target=process_2_scheduler)
-                process2.start()
-                # process2.join()
-            # elif not process3.is_alive():
-            #     process3 = Process(target=process_3)
-            #     process3.start()
-            #     # process3.join()
-            # elif not process4.is_alive():
-            #     process4 = Process(target=process_4)
-            #     process4.start()
-            #     # process4.join()
-            # elif not process5.is_alive():
-            #     process5 = Process(target=process_5)
-            #     process5.start()
-            #     # process5.join()
-            # elif not process7.is_alive():
-            #     process7 = Process(target=process_7)
-            #     process7.start()
-            #     # process7.join()
-            elif not process8.is_alive():
-                process8 = Process(target=process_8)
-                process8.start()
-                # process8.join()
-            # elif not process9.is_alive():
-            #     process9 = Process(target=process_9)
-            #     process9.start()
-            #     # process9.join()
-            # elif not process10.is_alive():
-            #     process10 = Process(target=process_10)
-            #     process10.start()
-            #     # process10.join()
-        except (ClientConnectorError, Error) as e:
-            # Обработка ошибок подключения и MySQL
-            if isinstance(e, ClientConnectorError):
-                print("Ошибка подключения к API ВКонтакте: ", e)
-            elif isinstance(e, Error):
-                if e.errno == 2003:  # Can't connect to MySQL server
-                    print("Ошибка MySQL: Lost connection to MySQL server at 'waiting for initial communication packet'")
-                elif e.errno == 2026:  # SSL connection error
-                    print("Ошибка MySQL: 2026 (HY000): SSL connection error")
-                else:
-                    print(f"Ошибка MySQL: {e.errno} - {e.msg}")
-
-            terminate_all_processes(update_server_process, process1, send_vk_process, process2, process8)
-
-        except ConnectionAbortedError:
-            print("Ошибка: Программа на вашем хост-компьютере разорвала установленное подключение")
-
-            terminate_all_processes(update_server_process, process1, send_vk_process, process2, process8)

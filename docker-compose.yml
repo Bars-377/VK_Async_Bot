@@ -10,7 +10,7 @@ services:
     environment:
       - PYTHONPATH=/app
     command: >
-      sh -c ". /venv/bin/activate && python main.py"
+      sh -c ". /venv/bin/activate && python -m src.main"
     restart: unless-stopped
     mem_limit: 1g # Ограничение памяти
 
